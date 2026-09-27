@@ -2,7 +2,9 @@ import "./colyseus018JoinPatch.js";
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import {
+  getSkillById,
   isInDuelZone,
+  parseSkillIds,
   realmDisplayName,
   VASSANA_CAP,
   type XianState,
@@ -31,6 +33,9 @@ const challengeDecline = document.getElementById(
   "challenge-decline",
 )! as HTMLButtonElement;
 const toast = document.getElementById("toast")!;
+const skillDraftOverlay = document.getElementById("skill-draft-overlay")!;
+const skillDraftOptions = document.getElementById("skill-draft-options")!;
+const skillDraftSubtitle = document.getElementById("skill-draft-subtitle")!;
 
 let room: Room<XianState> | null = null;
 
@@ -66,6 +71,40 @@ challengeDecline.addEventListener("click", () => {
   challengeBanner.classList.add("hidden");
 });
 
+function syncSkillDraftModal() {
+  if (!room) return;
+  const me = room.state.players.get(room.sessionId);
+  if (!me?.awaitingSkillDraft) {
+    skillDraftOverlay.classList.add("hidden");
+    skillDraftOptions.innerHTML = "";
+    return;
+  }
+  const offers = parseSkillIds(me.draftOfferIds);
+  skillDraftSubtitle.textContent = `ขั้น ${realmDisplayName(me.realmFloor, me.qiLayer)} — เลือกหนึ่งในสาม`;
+  skillDraftOptions.innerHTML = offers
+    .map((id) => {
+      const skill = getSkillById(id);
+      if (!skill) return "";
+      const kind =
+        skill.kind === "passive"
+          ? "passive"
+          : skill.kind === "active"
+            ? "ใช้ Shift"
+            : "ผสม";
+      return `<button type="button" class="skill-draft-btn" data-skill-id="${id}"><strong>${skill.nameTh}</strong><span>${kind} · ${skill.descriptionTh}</span></button>`;
+    })
+    .join("");
+  skillDraftOverlay.classList.remove("hidden");
+  for (const btn of skillDraftOptions.querySelectorAll<HTMLButtonElement>(
+    ".skill-draft-btn",
+  )) {
+    btn.onclick = () => {
+      const id = btn.dataset.skillId;
+      if (id) room?.send("pickSkillDraft", { skillId: id });
+    };
+  }
+}
+
 function updateHud() {
   if (!room) return;
   const me = room.state.players.get(room.sessionId);
@@ -74,6 +113,7 @@ function updateHud() {
       me.realmFloor as number,
       (me.qiLayer as number) ?? 1,
     );
+    const owned = parseSkillIds(me.ownedSkillIds);
     const vassanaPct = Math.min(
       100,
       Math.round((me.vassana / VASSANA_CAP) * 100),
@@ -83,7 +123,11 @@ function updateHud() {
       : isInDuelZone(me.x, me.y)
         ? "<br/><em>วงดวล FFA</em>"
         : "";
-    statsEl.innerHTML = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>วาสนา: ${vassanaPct}%${duelHint}`;
+    const skillLine =
+      owned.length > 0
+        ? `<br/>วิชา: ${owned.length} · Shift: ${getSkillById(me.lastActiveSkillId)?.nameTh ?? "—"}`
+        : "<br/><em>หนิงชี่ · โจมตีพื้นฐานอ่อน</em>";
+    statsEl.innerHTML = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>วาสนา: ${vassanaPct}%${skillLine}${duelHint}`;
   }
   const rows = [...room.state.players.values()]
     .filter((p) => p?.name)
@@ -143,9 +187,11 @@ async function joinGame() {
 
     room.onStateChange(() => {
       updateHud();
+      syncSkillDraftModal();
       syncChallengeBanner();
     });
     updateHud();
+    syncSkillDraftModal();
     syncChallengeBanner();
 
     const game = new Phaser.Game({

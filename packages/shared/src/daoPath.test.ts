@@ -16,15 +16,14 @@ import {
 } from "./daoPath.js";
 
 describe("isCombatKitActive", () => {
-  it("is always active without PathChoice gate", () => {
-    expect(isCombatKitActive(1, "", false)).toBe(true);
-    expect(isCombatKitActive(2, "", false)).toBe(true);
-    expect(isCombatKitActive(2, "sword", false)).toBe(true);
+  it("blocks while awaiting SkillDraft", () => {
+    expect(isCombatKitActive(true)).toBe(false);
+    expect(isCombatKitActive(false)).toBe(true);
   });
 
-  it("combatKitBlockReason never blocks", () => {
-    expect(combatKitBlockReason(1, "", false)).toBe(null);
-    expect(combatKitBlockReason(2, "", true)).toBe(null);
+  it("combatKitBlockReason reports draft gate", () => {
+    expect(combatKitBlockReason(true)).toBe("awaiting_skill_draft");
+    expect(combatKitBlockReason(false)).toBe(null);
   });
 });
 

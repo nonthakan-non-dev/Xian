@@ -51,31 +51,17 @@ export function isValidDaoPath(id: string): id is DaoPathChoice {
   return (DAO_PATH_IDS as readonly string[]).includes(id);
 }
 
-export function isCombatKitActive(
-  realmFloor: number,
-  daoPath: string,
-  awaitingPathChoice: boolean,
-): boolean {
-  return combatKitBlockReason(realmFloor, daoPath, awaitingPathChoice) === null;
-}
-
-export type CombatKitBlockReason = never;
+export type CombatKitBlockReason = "awaiting_skill_draft";
 
 /** Why LMB/Space/Skill are disabled — null means kit is active. */
 export function combatKitBlockReason(
-  _realmFloor: number,
-  _daoPath: string,
-  _awaitingPathChoice: boolean,
+  awaitingSkillDraft: boolean,
 ): CombatKitBlockReason | null {
-  return null;
+  return awaitingSkillDraft ? "awaiting_skill_draft" : null;
 }
 
-/** @deprecated PathChoice removed — SkillDraft replaces DaoPath (xian-10). */
-export function shouldAwaitPathChoice(
-  _realmFloor: number,
-  _daoPath: string,
-): boolean {
-  return false;
+export function isCombatKitActive(awaitingSkillDraft: boolean): boolean {
+  return combatKitBlockReason(awaitingSkillDraft) === null;
 }
 
 export function addPoisonStack(current: number): number {
@@ -101,11 +87,11 @@ export function applyIronSkinDamage(
 }
 
 export function isBodyStunImmune(
-  daoPath: string,
+  heavyBody: boolean,
   currentQi: number,
   maxQi: number,
 ): boolean {
-  return daoPath === "body" && currentQi > maxQi * 0.5;
+  return heavyBody && currentQi > maxQi * 0.5;
 }
 
 export function flyingSwordCount(
@@ -212,40 +198,29 @@ export function basicAttackRange(daoPath: string): number {
   }
 }
 
-export function herbSpeedMultiplier(daoPath: string, herbActive: boolean): number {
-  if (!herbActive) return 1;
-  if (daoPath === "sword") return 1.15;
-  if (daoPath === "shadow") return 1.1;
-  return 1;
+/** Generic HerbBuff — no longer path-specific (xian-10). */
+export function herbSpeedMultiplier(herbActive: boolean): number {
+  return herbActive ? 1.1 : 1;
 }
 
-export function herbDamageTakenMultiplier(
-  daoPath: string,
-  herbActive: boolean,
-): number {
-  if (!herbActive || daoPath !== "body") return 1;
-  return 0.85;
+export function herbDamageTakenMultiplier(herbActive: boolean): number {
+  return herbActive ? 0.9 : 1;
 }
 
-export function herbAoeRadiusBonus(daoPath: string, herbActive: boolean): number {
-  if (!herbActive || daoPath !== "lightning") return 0;
-  return 25;
+export function herbAoeRadiusBonus(herbActive: boolean): number {
+  return herbActive ? 12 : 0;
 }
 
-export function herbPoisonTickMultiplier(
-  daoPath: string,
-  herbActive: boolean,
-): number {
-  if (!herbActive || daoPath !== "shadow") return 1;
-  return 1.35;
+export function herbPoisonTickMultiplier(herbActive: boolean): number {
+  return herbActive ? 1.15 : 1;
 }
 
 export function shadowStealthSpeedBonus(
-  daoPath: string,
+  hasStealthPassive: boolean,
   msSinceDamage: number,
 ): number {
-  if (daoPath !== "shadow" || msSinceDamage < SHADOW_STEALTH_MS) return 1;
-  return 1.25;
+  if (!hasStealthPassive || msSinceDamage < SHADOW_STEALTH_MS) return 1;
+  return 1.2;
 }
 
 /** Sword dash / facing: movement first, then cursor aim, then default east. */

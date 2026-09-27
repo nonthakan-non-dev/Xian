@@ -6,10 +6,26 @@ import {
   BODY_SHIELD_END_SHOCKWAVE_RADIUS,
   BODY_SHIELD_PULSE_RADIUS,
   applyDamageToQi,
-  applyIronSkinDamage,
-  basicAttackArcWidth,
-  basicAttackRange,
   BASIC_ATTACK_COOLDOWN_MS,
+  applySkillPick,
+  arcWidthForSkillClass,
+  basicArcWidthForLoadout,
+  getSkillById,
+  getSkillPoolForRealm,
+  hasFlyingBladePassive,
+  hasOverloadPassive,
+  hasStealthPassive,
+  ownedUsesMeleeBasic,
+  parseSkillIds,
+  formatSkillIds,
+  passiveDamageTakenMultiplier,
+  qiDamageFromSkill,
+  rangeForSkillClass,
+  rollSkillDraft,
+  resolveBasicAttackDamage,
+  resolveBasicAttackRange,
+  skillAppliesPoisonOnHit,
+  validateSkillPick,
   isBodyMeleeHit,
   DASH_DISTANCE,
   DEMON_STATS,
@@ -49,8 +65,6 @@ import {
   qiToOrbValues,
   randomPointInZone,
   RESPAWN_QI,
-  resolveActiveDamage,
-  resolveBasicDamage,
   resolveFacingUnitVector,
   rollOrbWithVassana,
   SHADOW_WARP_RANGE,
@@ -181,6 +195,13 @@ export class XianRoom extends Room {
       this.handleDeclineChallenge(client.sessionId);
     });
 
+    this.onMessage(
+      "pickSkillDraft",
+      (client, data: { skillId?: string }) => {
+        this.handlePickSkillDraft(client.sessionId, String(data.skillId ?? ""));
+      },
+    );
+
     this.setSimulationInterval(() => this.tick(), TICK_RATE_MS);
 
     this.spawnOrbs(ORB_TARGET_COUNT);
@@ -202,8 +223,10 @@ export class XianRoom extends Room {
     player.realmFloor = 1;
     player.qiLayer = 1;
     player.vassana = 0;
-    player.daoPath = "";
-    player.awaitingPathChoice = false;
+    player.ownedSkillIds = "";
+    player.awaitingSkillDraft = false;
+    player.draftOfferIds = "";
+    player.lastActiveSkillId = "";
     player.poisonStacks = 0;
     player.overloadStacks = 0;
     player.stunUntil = 0;
@@ -408,20 +431,52 @@ export class XianRoom extends Room {
     return this.nowMs() < player.stunUntil;
   }
 
+  private ownedSkills(player: Player): string[] {
+    return parseSkillIds(player.ownedSkillIds);
+  }
+
   private speedMultiplier(player: Player): number {
     const now = this.nowMs();
     let m = 1;
     if (now < player.slowUntil) m *= 0.5;
-    m *= herbSpeedMultiplier(player.daoPath, this.herbActive(player));
+    m *= herbSpeedMultiplier(this.herbActive(player));
     m *= shadowStealthSpeedBonus(
-      player.daoPath,
+      hasStealthPassive(this.ownedSkills(player)),
       now - player.lastDamagedAt,
     );
     return m;
   }
 
-  private afterRealmPromote(_player: Player) {
-    // SkillDraft (xian-10) will hook realm promotion here.
+  private afterRealmPromote(player: Player) {
+    const pool = getSkillPoolForRealm(player.realmFloor).map((s) => s.id);
+    const offers = rollSkillDraft(pool, this.ownedSkills(player), Math.random);
+    if (offers.length === 0) {
+      player.awaitingSkillDraft = false;
+      player.draftOfferIds = "";
+      return;
+    }
+    player.awaitingSkillDraft = true;
+    player.draftOfferIds = formatSkillIds(offers);
+  }
+
+  private handlePickSkillDraft(sessionId: string, skillId: string) {
+    const player = this.state.players.get(sessionId);
+    if (!player || !player.awaitingSkillDraft) return;
+    const offers = parseSkillIds(player.draftOfferIds);
+    if (!validateSkillPick(skillId, offers)) return;
+    const def = getSkillById(skillId);
+    if (!def) return;
+    const result = applySkillPick({
+      ownedSkillIds: this.ownedSkills(player),
+      draftOfferIds: offers,
+      lastActiveSkillId: player.lastActiveSkillId,
+      skillId,
+      skillKind: def.kind,
+    });
+    player.ownedSkillIds = formatSkillIds(result.ownedSkillIds);
+    player.draftOfferIds = formatSkillIds(result.draftOfferIds);
+    player.awaitingSkillDraft = result.awaitingSkillDraft;
+    player.lastActiveSkillId = result.lastActiveSkillId;
   }
 
   private tick() {
@@ -446,10 +501,7 @@ export class XianRoom extends Room {
       if (player.poisonStacks > 0) {
         const tickDmg = poisonDamagePerTick(
           player.poisonStacks,
-          herbPoisonTickMultiplier(
-            player.daoPath,
-            this.herbActive(player),
-          ),
+          herbPoisonTickMultiplier(this.herbActive(player)),
         );
         if (tickDmg > 0) {
           const prevQi = player.currentQi;
@@ -469,7 +521,7 @@ export class XianRoom extends Room {
         }
       }
 
-      if (!this.isStunned(player)) {
+      if (!player.awaitingSkillDraft && !this.isStunned(player)) {
         const len = Math.hypot(player.inputX, player.inputY);
         if (len > 0.01) {
           const speed =
@@ -482,9 +534,11 @@ export class XianRoom extends Room {
         }
       }
 
-      this.tryPickupOrbs(player);
-      this.tryPickupHerbs(player);
-      this.tickFlyingSwords(player, now);
+      if (!player.awaitingSkillDraft) {
+        this.tryPickupOrbs(player);
+        this.tryPickupHerbs(player);
+        this.tickFlyingSwords(player, now);
+      }
     }
 
     for (const [demonId, demon] of this.state.demons) {
@@ -511,13 +565,10 @@ export class XianRoom extends Room {
   }
 
   private tickFlyingSwords(player: Player, now: number) {
+    const owned = this.ownedSkills(player);
     if (
-      !isCombatKitActive(
-        player.realmFloor,
-        player.daoPath,
-        player.awaitingPathChoice,
-      ) ||
-      player.daoPath !== "sword"
+      !isCombatKitActive(player.awaitingSkillDraft) ||
+      !hasFlyingBladePassive(owned)
     ) {
       return;
     }
@@ -602,13 +653,7 @@ export class XianRoom extends Room {
   ) {
     const attacker = this.state.players.get(sessionId);
     if (!attacker || attacker.currentQi <= 0) return;
-    if (
-      !isCombatKitActive(
-        attacker.realmFloor,
-        attacker.daoPath,
-        attacker.awaitingPathChoice,
-      )
-    ) {
+    if (!isCombatKitActive(attacker.awaitingSkillDraft)) {
       return;
     }
     if (this.isStunned(attacker)) return;
@@ -618,15 +663,16 @@ export class XianRoom extends Room {
     if (now - last < BASIC_ATTACK_COOLDOWN_MS) return;
     this.lastAttackMs.set(sessionId, now);
 
+    const owned = this.ownedSkills(attacker);
     const aimAngle = Math.atan2(aimY - attacker.y, aimX - attacker.x);
-    const range = basicAttackRange(attacker.daoPath);
-    const damage = resolveBasicDamage(attacker.daoPath, false);
+    const range = resolveBasicAttackRange(owned);
+    const damage = resolveBasicAttackDamage(owned);
 
-    if (attacker.daoPath === "body") {
+    if (ownedUsesMeleeBasic(owned)) {
       this.hitPlayersInMelee(attacker, sessionId, range, damage, true);
       this.hitDemonsInMelee(attacker, range, damage, true);
     } else {
-      const arc = basicAttackArcWidth(attacker.daoPath);
+      const arc = basicArcWidthForLoadout(owned);
       this.hitPlayersInArc(
         attacker,
         sessionId,
@@ -652,63 +698,123 @@ export class XianRoom extends Room {
   private handlePlayerSkill(sessionId: string, aimX: number, aimY: number) {
     const attacker = this.state.players.get(sessionId);
     if (!attacker || attacker.currentQi <= 0) return;
-    if (
-      !isCombatKitActive(
-        attacker.realmFloor,
-        attacker.daoPath,
-        attacker.awaitingPathChoice,
-      )
-    ) {
+    if (!isCombatKitActive(attacker.awaitingSkillDraft)) {
       return;
     }
     if (this.isStunned(attacker)) return;
 
+    const skillId = attacker.lastActiveSkillId;
+    const skill = skillId ? getSkillById(skillId) : undefined;
+    if (!skill || (skill.kind !== "active" && skill.kind !== "hybrid")) {
+      return;
+    }
+
     const now = this.nowMs();
+    const cd = skill.cooldownMs ?? ACTIVE_SKILL_COOLDOWN_MS;
     const last = this.lastSkillMs.get(sessionId) ?? 0;
-    if (now - last < ACTIVE_SKILL_COOLDOWN_MS) return;
+    if (now - last < cd) return;
     this.lastSkillMs.set(sessionId, now);
 
     let crit = false;
-    if (attacker.daoPath === "lightning") {
+    if (hasOverloadPassive(this.ownedSkills(attacker))) {
       const ol = overloadOnSkillUse(attacker.overloadStacks);
       attacker.overloadStacks = ol.stacks;
       crit = ol.crit;
     }
 
-    switch (attacker.daoPath) {
-      case "sword":
-        this.skillSwordDash(attacker, aimX, aimY, crit);
+    const damage = qiDamageFromSkill(skill, attacker.realmFloor, crit);
+    this.executeActiveSkill(
+      sessionId,
+      attacker,
+      skill,
+      aimX,
+      aimY,
+      damage,
+      crit,
+      now,
+    );
+  }
+
+  private executeActiveSkill(
+    sessionId: string,
+    attacker: Player,
+    skill: NonNullable<ReturnType<typeof getSkillById>>,
+    aimX: number,
+    aimY: number,
+    damage: number,
+    crit: boolean,
+    now: number,
+  ) {
+    const rc = skill.rangeClass;
+    const aimAngle = Math.atan2(aimY - attacker.y, aimX - attacker.x);
+
+    switch (rc) {
+      case "dash":
+        this.skillSwordDash(attacker, aimX, aimY, crit, damage);
         break;
-      case "body": {
-        attacker.shieldUntil = now + SHIELD_DURATION_MS;
-        this.bodyShieldShockwaveAt.set(
-          sessionId,
-          now + SHIELD_DURATION_MS,
-        );
-        const pulse = resolveActiveDamage("body", false);
-        this.hitPlayersInMelee(
+      case "self":
+      case "circle": {
+        if (rc === "self" || skill.nameTh.includes("โล่")) {
+          attacker.shieldUntil = now + SHIELD_DURATION_MS;
+          this.bodyShieldShockwaveAt.set(
+            sessionId,
+            now + SHIELD_DURATION_MS,
+          );
+        }
+        const radius = rangeForSkillClass(rc);
+        this.hitPlayersInMelee(attacker, sessionId, radius, damage, true, crit);
+        this.hitDemonsInMelee(attacker, radius, damage, true, crit);
+        break;
+      }
+      case "global":
+      case "line":
+      case "cone":
+      case "single": {
+        const range = rangeForSkillClass(rc);
+        const arc = arcWidthForSkillClass(rc);
+        this.hitPlayersInArc(
           attacker,
           sessionId,
-          BODY_SHIELD_PULSE_RADIUS,
-          pulse,
-          false,
+          aimAngle,
+          range,
+          damage,
+          true,
+          crit,
+          arc,
         );
-        this.hitDemonsInMelee(
+        this.hitDemonsInArc(
           attacker,
-          BODY_SHIELD_PULSE_RADIUS,
-          pulse,
-          false,
+          aimAngle,
+          range,
+          damage,
+          true,
+          crit,
+          arc,
         );
         break;
       }
-      case "lightning":
-        this.skillLightningAoE(attacker, aimX, aimY, crit);
-        break;
-      case "shadow":
-        this.skillShadowWarp(attacker, aimX, aimY, crit);
-        break;
       default:
+        this.skillShadowWarp(attacker, aimX, aimY, crit, damage);
         break;
+    }
+
+    if (skill.ccType === "stun") {
+      const stunUntil = now + STUN_MS;
+      for (const [, target] of this.state.players) {
+        if (target === attacker || target.currentQi <= 0) continue;
+        if (distPoint(attacker.x, attacker.y, target.x, target.y) <= 100) {
+          target.stunUntil = Math.max(target.stunUntil, stunUntil);
+        }
+      }
+    }
+    if (skill.ccType === "slow") {
+      const slowUntil = now + SLOW_MS;
+      for (const [, target] of this.state.players) {
+        if (target === attacker || target.currentQi <= 0) continue;
+        if (distPoint(attacker.x, attacker.y, target.x, target.y) <= 120) {
+          target.slowUntil = Math.max(target.slowUntil, slowUntil);
+        }
+      }
     }
   }
 
@@ -717,6 +823,7 @@ export class XianRoom extends Room {
     aimX: number,
     aimY: number,
     crit: boolean,
+    damage: number,
   ) {
     const { x: nx, y: ny } = resolveFacingUnitVector(
       attacker.inputX,
@@ -738,7 +845,6 @@ export class XianRoom extends Room {
       0,
       MAP_HEIGHT,
     );
-    const damage = resolveActiveDamage("sword", crit);
     for (const [id, target] of this.state.players) {
       if (target === attacker || target.currentQi <= 0) continue;
       if (!this.playersCanFight(attacker, target)) continue;
@@ -790,11 +896,11 @@ export class XianRoom extends Room {
     aimX: number,
     aimY: number,
     crit: boolean,
+    damage: number,
   ) {
     const radius =
       LIGHTNING_AOE_RADIUS +
-      herbAoeRadiusBonus(attacker.daoPath, this.herbActive(attacker));
-    const damage = resolveActiveDamage("lightning", crit);
+      herbAoeRadiusBonus(this.herbActive(attacker));
     const stunUntil = this.nowMs() + STUN_MS;
 
     for (const [id, target] of this.state.players) {
@@ -804,7 +910,7 @@ export class XianRoom extends Room {
         this.dealDamageToPlayer(attacker, target, id, damage, false, crit);
         if (
           !isBodyStunImmune(
-            target.daoPath,
+            ownedUsesMeleeBasic(this.ownedSkills(target)),
             target.currentQi,
             maxQiForRealm(target.realmFloor, target.qiLayer),
           )
@@ -827,6 +933,7 @@ export class XianRoom extends Room {
     aimX: number,
     aimY: number,
     crit: boolean,
+    damage: number,
   ) {
     let bestId: string | undefined;
     let bestDist = SHADOW_WARP_RANGE;
@@ -842,7 +949,6 @@ export class XianRoom extends Room {
       }
     }
 
-    const damage = resolveActiveDamage("shadow", crit);
     const slowUntil = this.nowMs() + SLOW_MS;
 
     if (best && bestId && this.playersCanFight(attacker, best)) {
@@ -924,7 +1030,10 @@ export class XianRoom extends Room {
     for (const [demonId, demon] of this.state.demons) {
       if (demon.currentQi <= 0) continue;
       if (isBodyMeleeHit(attacker.x, attacker.y, demon.x, demon.y, range)) {
-        if (applyPathOnHit && attacker.daoPath === "shadow") {
+        if (
+          applyPathOnHit &&
+          skillAppliesPoisonOnHit(attacker.lastActiveSkillId)
+        ) {
           this.applyPoisonToDemon(demonId, demon);
         }
         this.damageDemonAt(demon, damage, { crit });
@@ -993,7 +1102,10 @@ export class XianRoom extends Room {
           arcWidth,
         )
       ) {
-        if (applyPathOnHit && attacker.daoPath === "shadow") {
+        if (
+          applyPathOnHit &&
+          skillAppliesPoisonOnHit(attacker.lastActiveSkillId)
+        ) {
           this.applyPoisonToDemon(demonId, demon);
         }
         this.damageDemonAt(demon, damage, { crit });
@@ -1076,7 +1188,7 @@ export class XianRoom extends Room {
     const at = this.bodyShieldShockwaveAt.get(sessionId);
     if (at === undefined || now < at) return;
     this.bodyShieldShockwaveAt.delete(sessionId);
-    if (player.daoPath !== "body" || player.currentQi <= 0) return;
+    if (player.currentQi <= 0) return;
     this.hitPlayersInMelee(
       player,
       sessionId,
@@ -1103,20 +1215,20 @@ export class XianRoom extends Room {
     const now = this.nowMs();
     let damage = rawDamage;
 
-    if (applyPathOnHit && attacker.daoPath === "shadow") {
+    if (
+      applyPathOnHit &&
+      skillAppliesPoisonOnHit(attacker.lastActiveSkillId)
+    ) {
       this.applyPoisonToPlayer(targetId, target, now);
     }
-    if (applyPathOnHit && attacker.daoPath === "body") {
+    if (applyPathOnHit && ownedUsesMeleeBasic(this.ownedSkills(attacker))) {
       const angle = Math.atan2(target.y - attacker.y, target.x - attacker.x);
       target.x = clamp(target.x + Math.cos(angle) * 28, 0, MAP_WIDTH);
       target.y = clamp(target.y + Math.sin(angle) * 28, 0, MAP_HEIGHT);
     }
 
-    damage *= herbDamageTakenMultiplier(
-      target.daoPath,
-      this.herbActive(target),
-    );
-    damage = applyIronSkinDamage(damage, target.daoPath);
+    damage *= herbDamageTakenMultiplier(this.herbActive(target));
+    damage *= passiveDamageTakenMultiplier(this.ownedSkills(target));
 
     if (now < target.shieldUntil) {
       const reflected = rawDamage * 0.5;
@@ -1236,11 +1348,10 @@ export class XianRoom extends Room {
             if (sid && nearestPlayer) {
               const prevQi = nearestPlayer.currentQi;
               let dmg = stats.damage;
-              dmg *= herbDamageTakenMultiplier(
-                nearestPlayer.daoPath,
-                this.herbActive(nearestPlayer),
+              dmg *= herbDamageTakenMultiplier(this.herbActive(nearestPlayer));
+              dmg *= passiveDamageTakenMultiplier(
+                this.ownedSkills(nearestPlayer),
               );
-              dmg = applyIronSkinDamage(dmg, nearestPlayer.daoPath);
               nearestPlayer.currentQi = applyDamageToQi(prevQi, dmg);
               nearestPlayer.lastDamagedAt = now;
               const dealt = prevQi - nearestPlayer.currentQi;

@@ -1,12 +1,15 @@
 import Phaser from "phaser";
 import {
-  daoPathAccentColor,
   flyingSwordCount,
+  hasFlyingBladePassive,
+  hasStealthPassive,
   isCombatKitActive,
+  parseSkillIds,
   playerBodyRadius,
   realmFillColor,
   realmGlowColor,
   SHADOW_STEALTH_MS,
+  skillLoadoutAccentColor,
   type Player,
 } from "@xian/shared";
 
@@ -18,8 +21,9 @@ export function applyPlayerColors(
   const r = playerBodyRadius(p.realmFloor);
   body.setRadius(r);
   body.setFillStyle(realmFillColor(p.realmFloor), 1);
-  const accent = daoPathAccentColor(p.daoPath);
-  body.setStrokeStyle(3, accent, p.daoPath ? 0.95 : 0.45);
+  const owned = parseSkillIds(p.ownedSkillIds);
+  const accent = skillLoadoutAccentColor(p.lastActiveSkillId);
+  body.setStrokeStyle(3, accent, owned.length > 0 ? 0.95 : 0.45);
   glow.setRadius(r + 14);
   glow.setFillStyle(realmGlowColor(p.realmFloor), 0.22);
 }
@@ -32,13 +36,14 @@ export function drawSwordOrbit(
   timeSec: number,
 ) {
   g.clear();
+  const owned = parseSkillIds(p.ownedSkillIds);
   if (
-    p.daoPath !== "sword" ||
-    !isCombatKitActive(p.realmFloor, p.daoPath, p.awaitingPathChoice)
+    !hasFlyingBladePassive(owned) ||
+    !isCombatKitActive(p.awaitingSkillDraft)
   ) {
     return;
   }
-  const count = flyingSwordCount(p.realmFloor);
+  const count = flyingSwordCount(p.realmFloor, p.qiLayer);
   if (count <= 0) return;
   const orbitR = playerBodyRadius(p.realmFloor) + 22;
   g.lineStyle(1, 0x99eeff, 0.35);
@@ -57,7 +62,7 @@ export function shadowStealthAlpha(
   lastHitClientMs: number | undefined,
   nowMs: number,
 ): number {
-  if (p.daoPath !== "shadow") return 1;
+  if (!hasStealthPassive(parseSkillIds(p.ownedSkillIds))) return 1;
   if (!lastHitClientMs) return 0.62;
   return nowMs - lastHitClientMs >= SHADOW_STEALTH_MS ? 0.55 : 1;
 }
@@ -88,15 +93,14 @@ export function spawnBodyShieldPulse(
   scene: Phaser.Scene,
   x: number,
   y: number,
-  radius: number,
+  bodyRadius: number,
 ) {
-  const ring = scene.add.circle(x, y, radius + 8, 0xffcc55, 0.35);
-  ring.setStrokeStyle(2, 0xffeeaa, 0.8);
+  const ring = scene.add.circle(x, y, bodyRadius + 8, 0xffdd88, 0.45);
   ring.setDepth(38);
   scene.tweens.add({
     targets: ring,
-    scale: 1.5,
     alpha: 0,
+    scale: 2.2,
     duration: 400,
     onComplete: () => ring.destroy(),
   });
@@ -107,13 +111,13 @@ export function spawnShadowWarpFlash(
   x: number,
   y: number,
 ) {
-  const puff = scene.add.circle(x, y, 20, 0x9966cc, 0.45);
-  puff.setDepth(38);
+  const flash = scene.add.circle(x, y, 20, 0xbb88ff, 0.55);
+  flash.setDepth(38);
   scene.tweens.add({
-    targets: puff,
-    scale: 2.2,
+    targets: flash,
     alpha: 0,
+    scale: 2.5,
     duration: 280,
-    onComplete: () => puff.destroy(),
+    onComplete: () => flash.destroy(),
   });
 }

@@ -1,3 +1,4 @@
+import { skillAccentColorForActive } from "./skillCombat.js";
 import type { DaoPathChoice } from "./daoPath.js";
 import {
   clampRealmFloor,
@@ -86,6 +87,12 @@ export function daoPathAccentColor(daoPath: string): number {
     return DAO_PATH_ACCENT[daoPath];
   }
   return DAO_PATH_ACCENT[""];
+}
+
+/** Stroke accent from last active CultivationSkill (SkillDraft). */
+export function skillLoadoutAccentColor(lastActiveSkillId: string): number {
+  if (!lastActiveSkillId) return DAO_PATH_ACCENT[""];
+  return skillAccentColorForActive(lastActiveSkillId);
 }
 
 export function playerBodyRadius(realmFloor: number): number {

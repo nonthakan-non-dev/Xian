@@ -3,6 +3,7 @@ import type { Room } from "colyseus.js";
 import {
   DEMON_ZONES,
   DUEL_ZONES,
+  getSkillById,
   isCombatKitActive,
   isInAnyDemonZone,
   isInDuelZone,
@@ -210,11 +211,7 @@ export class WorldScene extends Phaser.Scene {
   private canFight(): boolean {
     const me = this.room?.state.players.get(this.room.sessionId);
     if (!me || me.currentQi <= 0) return false;
-    return isCombatKitActive(
-      me.realmFloor,
-      me.daoPath,
-      me.awaitingPathChoice,
-    );
+    return isCombatKitActive(me.awaitingSkillDraft);
   }
 
   private setFacingToward(worldX: number, worldY: number, fromX: number, fromY: number) {
@@ -227,16 +224,13 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private skillAimPoint(me: Player): { aimX: number; aimY: number } {
-    if (me.daoPath === "sword") {
-      return {
-        aimX: me.x + this.facing.x * 200,
-        aimY: me.y + this.facing.y * 200,
-      };
-    }
     const pointer = this.input.activePointer;
+    if (pointer.worldX || pointer.worldY) {
+      return { aimX: pointer.worldX, aimY: pointer.worldY };
+    }
     return {
-      aimX: pointer.worldX || me.x + 80,
-      aimY: pointer.worldY || me.y,
+      aimX: me.x + this.facing.x * 200,
+      aimY: me.y + this.facing.y * 200,
     };
   }
 
@@ -262,7 +256,10 @@ export class WorldScene extends Phaser.Scene {
     if (!this.room || !this.canFight()) return;
     const me = this.room.state.players.get(this.room.sessionId);
     if (!me) return;
-    if (me.daoPath === "sword") {
+    const skill = me.lastActiveSkillId
+      ? getSkillById(me.lastActiveSkillId)
+      : undefined;
+    if (skill?.rangeClass === "dash") {
       const aim = this.skillAimPoint(me);
       worldX = aim.aimX;
       worldY = aim.aimY;
@@ -270,11 +267,12 @@ export class WorldScene extends Phaser.Scene {
     this.room.send("skill", { aimX: worldX, aimY: worldY });
     playSfx("skill");
     const r = playerBodyRadius(me.realmFloor);
-    if (me.daoPath === "lightning") {
+    const rc = skill?.rangeClass;
+    if (rc === "circle" || rc === "global" || rc === "line") {
       spawnLightningStrike(this, worldX, worldY);
-    } else if (me.daoPath === "body") {
+    } else if (rc === "self") {
       spawnBodyShieldPulse(this, me.x, me.y, r);
-    } else if (me.daoPath === "shadow") {
+    } else if (rc === "single") {
       spawnShadowWarpFlash(this, worldX, worldY);
     }
     const flash = this.add.circle(me.x, me.y, 36, 0xaaccff, 0.35);
@@ -364,11 +362,14 @@ export class WorldScene extends Phaser.Scene {
     }
 
     const now = this.time.now;
+    const meInput = this.room.state.players.get(this.room.sessionId);
+    const draftLocked = meInput?.awaitingSkillDraft ?? false;
+
     const inputChanged = ix !== this.lastInput.x || iy !== this.lastInput.y;
     const moving = ix !== 0 || iy !== 0;
     if (
-      inputChanged ||
-      (moving && now - this.inputResendAt > 120)
+      !draftLocked &&
+      (inputChanged || (moving && now - this.inputResendAt > 120))
     ) {
       this.lastInput = { x: ix, y: iy };
       this.room.send("input", { x: ix, y: iy });
