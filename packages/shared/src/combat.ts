@@ -44,7 +44,7 @@ export function isInAttackArc(
   arcWidth = MELEE_HIT_ANGLE,
 ): boolean {
   const dist = Math.hypot(targetX - fromX, targetY - fromY);
-  if (dist > range || dist < 1) return false;
+  if (dist > range) return false;
   const angleTo = angleToTarget(fromX, fromY, targetX, targetY);
   let diff = angleTo - aimAngle;
   while (diff > Math.PI) diff -= Math.PI * 2;

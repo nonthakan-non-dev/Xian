@@ -146,10 +146,34 @@ export function resolveActiveDamage(
   return crit ? base * 2 : base;
 }
 
+/** Melee circle — no aim required (体修). */
+export function isBodyMeleeHit(
+  fromX: number,
+  fromY: number,
+  targetX: number,
+  targetY: number,
+  range: number,
+): boolean {
+  return Math.hypot(targetX - fromX, targetY - fromY) <= range;
+}
+
+export function basicAttackArcWidth(daoPath: string): number {
+  switch (daoPath) {
+    case "lightning":
+    case "shadow":
+      return Math.PI * 0.22;
+    case "body":
+      return Math.PI * 0.75;
+    case "sword":
+    default:
+      return Math.PI * 0.55;
+  }
+}
+
 export function basicAttackRange(daoPath: string): number {
   switch (daoPath) {
     case "body":
-      return 72;
+      return 98;
     case "lightning":
       return 200;
     case "shadow":

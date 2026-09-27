@@ -25,4 +25,8 @@ describe("isInAttackArc", () => {
     expect(isInAttackArc(0, 0, 0, 50, 0, 100)).toBe(true);
     expect(isInAttackArc(0, 0, 0, -50, 0, 100)).toBe(false);
   });
+
+  it("hits at point-blank range", () => {
+    expect(isInAttackArc(0, 0, 0, 0, 0, 100)).toBe(true);
+  });
 });

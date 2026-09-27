@@ -4,8 +4,10 @@ import {
   addPoisonStack,
   applyDamageToQi,
   applyIronSkinDamage,
+  basicAttackArcWidth,
   basicAttackRange,
   BASIC_ATTACK_COOLDOWN_MS,
+  isBodyMeleeHit,
   DASH_DISTANCE,
   DEMON_STATS,
   DEMON_ZONES,
@@ -202,6 +204,40 @@ export class XianRoom extends Room {
     return this.clock.elapsedTime;
   }
 
+  private emitDamageNumber(
+    x: number,
+    y: number,
+    amount: number,
+    opts?: { crit?: boolean; poison?: boolean },
+  ) {
+    const rounded = Math.round(amount);
+    if (rounded <= 0) return;
+    this.broadcast("damageNumber", {
+      x,
+      y,
+      amount: rounded,
+      crit: opts?.crit ?? false,
+      poison: opts?.poison ?? false,
+    });
+  }
+
+  private damageDemonAt(
+    demon: Demon,
+    amount: number,
+    opts?: { crit?: boolean; poison?: boolean },
+  ): number {
+    const prev = demon.currentQi;
+    demon.currentQi = damageDemon(demon.currentQi, amount);
+    const dealt = prev - demon.currentQi;
+    if (dealt > 0) {
+      this.emitDamageNumber(demon.x, demon.y, dealt, {
+        crit: opts?.crit,
+        poison: opts?.poison,
+      });
+    }
+    return dealt;
+  }
+
   private herbActive(player: Player): boolean {
     return this.nowMs() < player.herbBuffUntil;
   }
@@ -252,6 +288,10 @@ export class XianRoom extends Room {
         if (tickDmg > 0) {
           const prevQi = player.currentQi;
           player.currentQi = applyDamageToQi(prevQi, tickDmg);
+          const dealt = prevQi - player.currentQi;
+          if (dealt > 0) {
+            this.emitDamageNumber(player.x, player.y, dealt, { poison: true });
+          }
           if (player.currentQi <= 0) {
             const sid = [...this.state.players.entries()].find(
               ([, p]) => p === player,
@@ -280,9 +320,10 @@ export class XianRoom extends Room {
 
     for (const demon of this.state.demons.values()) {
       if (demon.poisonStacks > 0 && demon.currentQi > 0) {
-        demon.currentQi = damageDemon(
-          demon.currentQi,
+        this.damageDemonAt(
+          demon,
           poisonDamagePerTick(demon.poisonStacks),
+          { poison: true },
         );
         if (demon.currentQi <= 0) {
           const demonId = [...this.state.demons.entries()].find(
@@ -331,10 +372,11 @@ export class XianRoom extends Room {
           target.id,
           FLYING_SWORD_DAMAGE,
           false,
+          false,
         );
       } else {
         const demon = target.entity as Demon;
-        demon.currentQi = damageDemon(demon.currentQi, FLYING_SWORD_DAMAGE);
+        this.damageDemonAt(demon, FLYING_SWORD_DAMAGE);
         if (demon.currentQi <= 0) {
           this.killDemon(demon, target.id, player);
         }
@@ -404,8 +446,31 @@ export class XianRoom extends Room {
     const range = basicAttackRange(attacker.daoPath);
     const damage = resolveBasicDamage(attacker.daoPath, false);
 
-    this.hitPlayersInArc(attacker, sessionId, aimAngle, range, damage, true);
-    this.hitDemonsInArc(attacker, aimAngle, range, damage, true);
+    if (attacker.daoPath === "body") {
+      this.hitPlayersInMelee(attacker, sessionId, range, damage, true);
+      this.hitDemonsInMelee(attacker, range, damage, true);
+    } else {
+      const arc = basicAttackArcWidth(attacker.daoPath);
+      this.hitPlayersInArc(
+        attacker,
+        sessionId,
+        aimAngle,
+        range,
+        damage,
+        true,
+        false,
+        arc,
+      );
+      this.hitDemonsInArc(
+        attacker,
+        aimAngle,
+        range,
+        damage,
+        true,
+        false,
+        arc,
+      );
+    }
   }
 
   private handlePlayerSkill(sessionId: string, aimX: number, aimY: number) {
@@ -438,9 +503,14 @@ export class XianRoom extends Room {
       case "sword":
         this.skillSwordDash(attacker, aimX, aimY, crit);
         break;
-      case "body":
+      case "body": {
         attacker.shieldUntil = now + SHIELD_DURATION_MS;
+        const pulse = resolveActiveDamage("body", false);
+        const pulseR = 105;
+        this.hitPlayersInMelee(attacker, sessionId, pulseR, pulse, false);
+        this.hitDemonsInMelee(attacker, pulseR, pulse, false);
         break;
+      }
       case "lightning":
         this.skillLightningAoE(attacker, aimX, aimY, crit);
         break;
@@ -482,7 +552,7 @@ export class XianRoom extends Room {
     for (const [id, target] of this.state.players) {
       if (target === attacker || target.currentQi <= 0) continue;
       if (this.pointNearSegment(target.x, target.y, startX, startY, attacker.x, attacker.y, 48)) {
-        this.dealDamageToPlayer(attacker, target, id, damage, false);
+        this.dealDamageToPlayer(attacker, target, id, damage, false, crit);
       }
     }
     for (const [demonId, demon] of this.state.demons) {
@@ -498,7 +568,7 @@ export class XianRoom extends Room {
           48,
         )
       ) {
-        demon.currentQi = damageDemon(demon.currentQi, damage);
+        this.damageDemonAt(demon, damage, { crit });
         if (demon.currentQi <= 0) this.killDemon(demon, demonId, attacker);
       }
     }
@@ -539,7 +609,7 @@ export class XianRoom extends Room {
     for (const [id, target] of this.state.players) {
       if (target === attacker || target.currentQi <= 0) continue;
       if (distPoint(aimX, aimY, target.x, target.y) <= radius) {
-        this.dealDamageToPlayer(attacker, target, id, damage, false);
+        this.dealDamageToPlayer(attacker, target, id, damage, false, crit);
         if (!isBodyStunImmune(target.daoPath, target.currentQi, maxQiForRealm(target.realmFloor))) {
           target.stunUntil = Math.max(target.stunUntil, stunUntil);
         }
@@ -548,7 +618,7 @@ export class XianRoom extends Room {
     for (const [demonId, demon] of this.state.demons) {
       if (demon.currentQi <= 0) continue;
       if (distPoint(aimX, aimY, demon.x, demon.y) <= radius) {
-        demon.currentQi = damageDemon(demon.currentQi, damage);
+        this.damageDemonAt(demon, damage, { crit });
         if (demon.currentQi <= 0) this.killDemon(demon, demonId, attacker);
       }
     }
@@ -589,7 +659,7 @@ export class XianRoom extends Room {
         0,
         MAP_HEIGHT,
       );
-      this.dealDamageToPlayer(attacker, best, bestId, damage, false);
+      this.dealDamageToPlayer(attacker, best, bestId, damage, false, crit);
       best.slowUntil = Math.max(best.slowUntil, slowUntil);
       return;
     }
@@ -600,7 +670,7 @@ export class XianRoom extends Room {
       if (d <= SHADOW_WARP_RANGE) {
         attacker.x = demon.x - 30;
         attacker.y = demon.y;
-        demon.currentQi = damageDemon(demon.currentQi, damage);
+        this.damageDemonAt(demon, damage, { crit });
         demon.poisonStacks = addPoisonStack(demon.poisonStacks);
         if (demon.currentQi <= 0) this.killDemon(demon, demonId, attacker);
         return;
@@ -620,6 +690,52 @@ export class XianRoom extends Room {
     );
   }
 
+  private hitPlayersInMelee(
+    attacker: Player,
+    sessionId: string,
+    range: number,
+    damage: number,
+    applyPathOnHit: boolean,
+    crit = false,
+  ) {
+    for (const [id, target] of this.state.players) {
+      if (id === sessionId || target.currentQi <= 0) continue;
+      if (
+        isBodyMeleeHit(attacker.x, attacker.y, target.x, target.y, range)
+      ) {
+        this.dealDamageToPlayer(
+          attacker,
+          target,
+          id,
+          damage,
+          applyPathOnHit,
+          crit,
+        );
+      }
+    }
+  }
+
+  private hitDemonsInMelee(
+    attacker: Player,
+    range: number,
+    damage: number,
+    applyPathOnHit: boolean,
+    crit = false,
+  ) {
+    for (const [demonId, demon] of this.state.demons) {
+      if (demon.currentQi <= 0) continue;
+      if (isBodyMeleeHit(attacker.x, attacker.y, demon.x, demon.y, range)) {
+        if (applyPathOnHit && attacker.daoPath === "shadow") {
+          demon.poisonStacks = addPoisonStack(demon.poisonStacks);
+        }
+        this.damageDemonAt(demon, damage, { crit });
+        if (demon.currentQi <= 0) {
+          this.killDemon(demon, demonId, attacker);
+        }
+      }
+    }
+  }
+
   private hitPlayersInArc(
     attacker: Player,
     sessionId: string,
@@ -627,6 +743,8 @@ export class XianRoom extends Room {
     range: number,
     damage: number,
     applyPathOnHit: boolean,
+    crit = false,
+    arcWidth?: number,
   ) {
     for (const [id, target] of this.state.players) {
       if (id === sessionId || target.currentQi <= 0) continue;
@@ -638,9 +756,17 @@ export class XianRoom extends Room {
           target.x,
           target.y,
           range,
+          arcWidth,
         )
       ) {
-        this.dealDamageToPlayer(attacker, target, id, damage, applyPathOnHit);
+        this.dealDamageToPlayer(
+          attacker,
+          target,
+          id,
+          damage,
+          applyPathOnHit,
+          crit,
+        );
       }
     }
   }
@@ -651,6 +777,8 @@ export class XianRoom extends Room {
     range: number,
     damage: number,
     applyPathOnHit: boolean,
+    crit = false,
+    arcWidth?: number,
   ) {
     for (const [demonId, demon] of this.state.demons) {
       if (demon.currentQi <= 0) continue;
@@ -662,12 +790,13 @@ export class XianRoom extends Room {
           demon.x,
           demon.y,
           range,
+          arcWidth,
         )
       ) {
         if (applyPathOnHit && attacker.daoPath === "shadow") {
           demon.poisonStacks = addPoisonStack(demon.poisonStacks);
         }
-        demon.currentQi = damageDemon(demon.currentQi, damage);
+        this.damageDemonAt(demon, damage, { crit });
         if (demon.currentQi <= 0) {
           this.killDemon(demon, demonId, attacker);
         }
@@ -681,6 +810,7 @@ export class XianRoom extends Room {
     targetId: string,
     rawDamage: number,
     applyPathOnHit: boolean,
+    crit = false,
   ) {
     const now = this.nowMs();
     let damage = rawDamage;
@@ -704,13 +834,22 @@ export class XianRoom extends Room {
       const reflected = rawDamage * 0.5;
       damage *= 0.5;
       if (attacker.currentQi > 0 && attacker !== target) {
+        const atkPrev = attacker.currentQi;
         attacker.currentQi = applyDamageToQi(attacker.currentQi, reflected);
+        const reflDealt = atkPrev - attacker.currentQi;
+        if (reflDealt > 0) {
+          this.emitDamageNumber(attacker.x, attacker.y, reflDealt);
+        }
       }
     }
 
     const prevQi = target.currentQi;
     target.currentQi = applyDamageToQi(prevQi, damage);
     target.lastDamagedAt = now;
+    const dealt = prevQi - target.currentQi;
+    if (dealt > 0) {
+      this.emitDamageNumber(target.x, target.y, dealt, { crit });
+    }
 
     if (target.currentQi <= 0) {
       this.killPlayer(target, targetId, prevQi);
@@ -794,6 +933,10 @@ export class XianRoom extends Room {
               dmg = applyIronSkinDamage(dmg, nearestPlayer.daoPath);
               nearestPlayer.currentQi = applyDamageToQi(prevQi, dmg);
               nearestPlayer.lastDamagedAt = now;
+              const dealt = prevQi - nearestPlayer.currentQi;
+              if (dealt > 0) {
+                this.emitDamageNumber(nearestPlayer.x, nearestPlayer.y, dealt);
+              }
               if (nearestPlayer.currentQi <= 0) {
                 this.killPlayer(nearestPlayer, sid, prevQi);
               }

@@ -27,6 +27,7 @@ export class WorldScene extends Phaser.Scene {
   private labels = new Map<string, Phaser.GameObjects.Text>();
   private demonSprites = new Map<string, Phaser.GameObjects.Arc>();
   private lastInput = { x: 0, y: 0 };
+  private inputResendAt = 0;
   /** Last non-zero move / aim direction for sword dash. */
   private facing = { x: 1, y: 0 };
   private spaceKey?: Phaser.Input.Keyboard.Key;
@@ -97,8 +98,65 @@ export class WorldScene extends Phaser.Scene {
       this.onDeathMessage?.(msg);
     });
 
+    this.room.onMessage(
+      "damageNumber",
+      (msg: {
+        x: number;
+        y: number;
+        amount: number;
+        crit?: boolean;
+        poison?: boolean;
+      }) => {
+        this.spawnDamageNumber(
+          msg.x,
+          msg.y,
+          msg.amount,
+          msg.crit ?? false,
+          msg.poison ?? false,
+        );
+      },
+    );
+
     this.syncWorldFromState();
     this.room.onStateChange(() => this.syncWorldFromState());
+  }
+
+  private spawnDamageNumber(
+    x: number,
+    y: number,
+    amount: number,
+    crit: boolean,
+    poison: boolean,
+  ) {
+    const jitter = (Math.random() - 0.5) * 24;
+    let color = "#ff9977";
+    let fontSize = "15px";
+    if (poison) {
+      color = "#77dd88";
+      fontSize = "13px";
+    } else if (crit) {
+      color = "#ffdd44";
+      fontSize = "20px";
+    }
+    const label = `-${amount}`;
+    const text = this.add
+      .text(x + jitter, y - 22, label, {
+        fontSize,
+        color,
+        fontStyle: crit ? "bold" : "normal",
+        stroke: "#1a0a0a",
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5)
+      .setDepth(40);
+    this.tweens.add({
+      targets: text,
+      y: y - 58 - Math.random() * 16,
+      alpha: 0,
+      duration: 650,
+      ease: "Cubic.easeOut",
+      onComplete: () => text.destroy(),
+    });
   }
 
   private canFight(): boolean {
@@ -241,9 +299,16 @@ export class WorldScene extends Phaser.Scene {
       this.facing = { x: ix / len, y: iy / len };
     }
 
-    if (ix !== this.lastInput.x || iy !== this.lastInput.y) {
+    const now = this.time.now;
+    const inputChanged = ix !== this.lastInput.x || iy !== this.lastInput.y;
+    const moving = ix !== 0 || iy !== 0;
+    if (
+      inputChanged ||
+      (moving && now - this.inputResendAt > 120)
+    ) {
       this.lastInput = { x: ix, y: iy };
       this.room.send("input", { x: ix, y: iy });
+      this.inputResendAt = now;
     }
 
     if (this.spaceKey && Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
@@ -270,8 +335,16 @@ export class WorldScene extends Phaser.Scene {
       }
       const sprite = this.playerSprites.get(id);
       if (sprite) {
-        sprite.x = Phaser.Math.Linear(sprite.x, p.x, 0.35);
-        sprite.y = Phaser.Math.Linear(sprite.y, p.y, 0.35);
+        const isSelf = id === this.room.sessionId;
+        const snapDist = isSelf ? 72 : 140;
+        const dist = Phaser.Math.Distance.Between(sprite.x, sprite.y, p.x, p.y);
+        if (dist > snapDist) {
+          sprite.setPosition(p.x, p.y);
+        } else {
+          const follow = isSelf ? 0.52 : 0.35;
+          sprite.x = Phaser.Math.Linear(sprite.x, p.x, follow);
+          sprite.y = Phaser.Math.Linear(sprite.y, p.y, follow);
+        }
         const label = this.labels.get(id);
         if (label) {
           label.x = sprite.x;
