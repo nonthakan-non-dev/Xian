@@ -48,6 +48,14 @@ _Avoid_: PvP zone
 Passive ของ DaoPath กระบี่บิน กระบี่โคจรโจมตีอัตโนมัติ
 _Avoid_: turret
 
+**PathRole**:
+บทบาทการต่อสู้ของแต่ละ DaoPath ใน demo (burst, tank, AoE, DoT) — ไม่ได้ออกแบบให้ DPS เท่ากันทุกสาย
+_Avoid_: class balance sheet, symmetric TTK
+
+**PoisonDecay**:
+กติกาว่า stack พิษลดลงเมื่อไม่ถูก refresh ตามเวลา (ไม่ค้างถาวร)
+_Avoid_: debuff timer ทั่วไป
+
 **Overload**:
 Passive ของ DaoPath เต๋าอัคนี สะสมแต้มสายฟ้าเพื่อ crit
 _Avoid_: combo meter

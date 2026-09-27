@@ -34,9 +34,13 @@ export const SHIELD_DURATION_MS = 1500;
 export const STUN_MS = 500;
 export const SLOW_MS = 1200;
 export const SHADOW_STEALTH_MS = 3000;
-export const FLYING_SWORD_INTERVAL_MS = 700;
+export const FLYING_SWORD_INTERVAL_MS = 820;
 export const FLYING_SWORD_RANGE = 160;
-export const FLYING_SWORD_DAMAGE = 6;
+export const FLYING_SWORD_DAMAGE = 5;
+export const BODY_SHIELD_PULSE_RADIUS = 95;
+export const BODY_SHIELD_END_SHOCKWAVE_RADIUS = 75;
+export const BODY_SHIELD_END_SHOCKWAVE_DAMAGE = 10;
+export const OVERLOAD_STACKS_FOR_CRIT = 3;
 export const DASH_DISTANCE = 140;
 export const LIGHTNING_AOE_RADIUS = 110;
 export const SHADOW_WARP_RANGE = 200;
@@ -72,7 +76,7 @@ export function overloadOnSkillUse(stacks: number): {
   stacks: number;
   crit: boolean;
 } {
-  if (stacks >= 2) {
+  if (stacks >= OVERLOAD_STACKS_FOR_CRIT) {
     return { stacks: 0, crit: true };
   }
   return { stacks: stacks + 1, crit: false };
@@ -98,6 +102,13 @@ export function flyingSwordCount(realmFloor: number): number {
   return Math.min(5, Math.max(0, realmFloor - 1));
 }
 
+/** Max passive DPS from FlyingSwords at a given RealmFloor (all blades hit each interval). */
+export function flyingSwordMaxPassiveDps(realmFloor: number): number {
+  const count = flyingSwordCount(realmFloor);
+  if (count <= 0) return 0;
+  return (count * FLYING_SWORD_DAMAGE * 1000) / FLYING_SWORD_INTERVAL_MS;
+}
+
 export function resolveBasicDamage(
   daoPath: string,
   crit: boolean,
@@ -114,7 +125,7 @@ export function resolveBasicDamage(
       base = 22;
       break;
     case "shadow":
-      base = 11;
+      base = 13;
       break;
     default:
       base = 14;
@@ -132,7 +143,7 @@ export function resolveActiveDamage(
       base = 24;
       break;
     case "body":
-      base = 8;
+      base = 14;
       break;
     case "lightning":
       base = 28;

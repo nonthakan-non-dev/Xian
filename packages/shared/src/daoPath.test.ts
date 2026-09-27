@@ -3,8 +3,13 @@ import {
   addPoisonStack,
   applyIronSkinDamage,
   flyingSwordCount,
+  flyingSwordMaxPassiveDps,
+  FLYING_SWORD_DAMAGE,
+  FLYING_SWORD_INTERVAL_MS,
   isCombatKitActive,
+  OVERLOAD_STACKS_FOR_CRIT,
   overloadOnSkillUse,
+  resolveActiveDamage,
   resolveBasicDamage,
   resolveFacingUnitVector,
 } from "./daoPath.js";
@@ -27,10 +32,12 @@ describe("poisonStacks", () => {
 });
 
 describe("overloadCrit", () => {
-  it("third skill use triggers crit and resets stacks", () => {
+  it("after three stacks the next skill crits and resets", () => {
+    expect(OVERLOAD_STACKS_FOR_CRIT).toBe(3);
     expect(overloadOnSkillUse(0)).toEqual({ stacks: 1, crit: false });
     expect(overloadOnSkillUse(1)).toEqual({ stacks: 2, crit: false });
-    expect(overloadOnSkillUse(2)).toEqual({ stacks: 0, crit: true });
+    expect(overloadOnSkillUse(2)).toEqual({ stacks: 3, crit: false });
+    expect(overloadOnSkillUse(3)).toEqual({ stacks: 0, crit: true });
   });
 });
 
@@ -46,6 +53,28 @@ describe("flyingSwordCount", () => {
     expect(flyingSwordCount(1)).toBe(0);
     expect(flyingSwordCount(3)).toBe(2);
     expect(flyingSwordCount(7)).toBe(5);
+  });
+});
+
+describe("flyingSwordMaxPassiveDps", () => {
+  it("caps peak passive DPS at realm seven", () => {
+    const dps = flyingSwordMaxPassiveDps(7);
+    expect(dps).toBeCloseTo(
+      (5 * FLYING_SWORD_DAMAGE * 1000) / FLYING_SWORD_INTERVAL_MS,
+    );
+    expect(dps).toBeLessThanOrEqual(35);
+  });
+});
+
+describe("bodyShieldPulse", () => {
+  it("active skill pulse deals fourteen before shockwave", () => {
+    expect(resolveActiveDamage("body", false)).toBe(14);
+  });
+});
+
+describe("shadowBasic", () => {
+  it("basic bolt buffed to thirteen", () => {
+    expect(resolveBasicDamage("shadow", false)).toBe(13);
   });
 });
 

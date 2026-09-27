@@ -2,6 +2,9 @@ import { Room, Client } from "@colyseus/core";
 import {
   ACTIVE_SKILL_COOLDOWN_MS,
   addPoisonStack,
+  BODY_SHIELD_END_SHOCKWAVE_DAMAGE,
+  BODY_SHIELD_END_SHOCKWAVE_RADIUS,
+  BODY_SHIELD_PULSE_RADIUS,
   applyDamageToQi,
   applyIronSkinDamage,
   basicAttackArcWidth,
@@ -40,7 +43,10 @@ import {
   ORB_TARGET_COUNT,
   overloadOnSkillUse,
   poisonDamagePerTick,
+  poisonDecayStateOnRefresh,
   promoteRealmFloor,
+  tickPoisonDecayState,
+  type PoisonDecayState,
   qiToOrbValues,
   randomPointInZone,
   RESPAWN_QI,
@@ -126,6 +132,8 @@ export class XianRoom extends Room {
   private lastSkillMs = new Map<string, number>();
   private lastDemonAttackMs = new Map<string, number>();
   private lastFlyingSwordMs = new Map<string, number>();
+  private poisonDecayByKey = new Map<string, PoisonDecayState>();
+  private bodyShieldShockwaveAt = new Map<string, number>();
 
   onCreate() {
     this.maxClients = MAX_PLAYERS;
@@ -338,8 +346,9 @@ export class XianRoom extends Room {
       loserQiBeforeZero,
       RESPAWN_QI,
     );
-    loser.poisonStacks = 0;
+    this.clearPoisonPlayer(loser.sessionId, loser);
     loser.overloadStacks = 0;
+    this.bodyShieldShockwaveAt.delete(loser.sessionId);
     loser.stunUntil = 0;
     loser.slowUntil = 0;
     loser.shieldUntil = 0;
@@ -433,7 +442,7 @@ export class XianRoom extends Room {
     const dt = TICK_RATE_MS / 1000;
     const now = this.nowMs();
 
-    for (const player of this.state.players.values()) {
+    for (const [sessionId, player] of this.state.players) {
       if (player.currentQi <= 0) continue;
 
       player.vassana = tickVassana(
@@ -441,6 +450,9 @@ export class XianRoom extends Room {
         dt,
         isInAnyDemonZone(player.x, player.y),
       );
+
+      this.tickPoisonDecayForPlayer(sessionId, player, now);
+      this.tryBodyShieldShockwave(sessionId, player, now);
 
       if (player.poisonStacks > 0) {
         const tickDmg = poisonDamagePerTick(
@@ -485,7 +497,9 @@ export class XianRoom extends Room {
       this.tickFlyingSwords(player, now);
     }
 
-    for (const demon of this.state.demons.values()) {
+    for (const [demonId, demon] of this.state.demons) {
+      this.tickPoisonDecayForDemon(demonId, demon, now);
+
       if (demon.poisonStacks > 0 && demon.currentQi > 0) {
         this.damageDemonAt(
           demon,
@@ -677,10 +691,24 @@ export class XianRoom extends Room {
         break;
       case "body": {
         attacker.shieldUntil = now + SHIELD_DURATION_MS;
+        this.bodyShieldShockwaveAt.set(
+          sessionId,
+          now + SHIELD_DURATION_MS,
+        );
         const pulse = resolveActiveDamage("body", false);
-        const pulseR = 105;
-        this.hitPlayersInMelee(attacker, sessionId, pulseR, pulse, false);
-        this.hitDemonsInMelee(attacker, pulseR, pulse, false);
+        this.hitPlayersInMelee(
+          attacker,
+          sessionId,
+          BODY_SHIELD_PULSE_RADIUS,
+          pulse,
+          false,
+        );
+        this.hitDemonsInMelee(
+          attacker,
+          BODY_SHIELD_PULSE_RADIUS,
+          pulse,
+          false,
+        );
         break;
       }
       case "lightning":
@@ -845,7 +873,7 @@ export class XianRoom extends Room {
         attacker.x = demon.x - 30;
         attacker.y = demon.y;
         this.damageDemonAt(demon, damage, { crit });
-        demon.poisonStacks = addPoisonStack(demon.poisonStacks);
+        this.applyPoisonToDemon(demonId, demon);
         if (demon.currentQi <= 0) this.killDemon(demon, demonId, attacker);
         return;
       }
@@ -901,7 +929,7 @@ export class XianRoom extends Room {
       if (demon.currentQi <= 0) continue;
       if (isBodyMeleeHit(attacker.x, attacker.y, demon.x, demon.y, range)) {
         if (applyPathOnHit && attacker.daoPath === "shadow") {
-          demon.poisonStacks = addPoisonStack(demon.poisonStacks);
+          this.applyPoisonToDemon(demonId, demon);
         }
         this.damageDemonAt(demon, damage, { crit });
         if (demon.currentQi <= 0) {
@@ -970,7 +998,7 @@ export class XianRoom extends Room {
         )
       ) {
         if (applyPathOnHit && attacker.daoPath === "shadow") {
-          demon.poisonStacks = addPoisonStack(demon.poisonStacks);
+          this.applyPoisonToDemon(demonId, demon);
         }
         this.damageDemonAt(demon, damage, { crit });
         if (demon.currentQi <= 0) {
@@ -978,6 +1006,94 @@ export class XianRoom extends Room {
         }
       }
     }
+  }
+
+  private poisonKeyPlayer(sessionId: string): string {
+    return `p:${sessionId}`;
+  }
+
+  private poisonKeyDemon(demonId: string): string {
+    return `d:${demonId}`;
+  }
+
+  private applyPoisonToPlayer(
+    sessionId: string,
+    player: Player,
+    now = this.nowMs(),
+  ) {
+    player.poisonStacks = addPoisonStack(player.poisonStacks);
+    this.poisonDecayByKey.set(
+      this.poisonKeyPlayer(sessionId),
+      poisonDecayStateOnRefresh(now),
+    );
+  }
+
+  private applyPoisonToDemon(demonId: string, demon: Demon) {
+    const now = this.nowMs();
+    demon.poisonStacks = addPoisonStack(demon.poisonStacks);
+    this.poisonDecayByKey.set(
+      this.poisonKeyDemon(demonId),
+      poisonDecayStateOnRefresh(now),
+    );
+  }
+
+  private clearPoisonPlayer(sessionId: string, player: Player) {
+    player.poisonStacks = 0;
+    this.poisonDecayByKey.delete(this.poisonKeyPlayer(sessionId));
+  }
+
+  private tickPoisonDecayForPlayer(
+    sessionId: string,
+    player: Player,
+    now: number,
+  ) {
+    if (player.poisonStacks <= 0) return;
+    const key = this.poisonKeyPlayer(sessionId);
+    const state = this.poisonDecayByKey.get(key);
+    const next = tickPoisonDecayState(player.poisonStacks, state, now);
+    player.poisonStacks = next.stacks;
+    if (next.state) {
+      this.poisonDecayByKey.set(key, next.state);
+    } else {
+      this.poisonDecayByKey.delete(key);
+    }
+  }
+
+  private tickPoisonDecayForDemon(demonId: string, demon: Demon, now: number) {
+    if (demon.poisonStacks <= 0) return;
+    const key = this.poisonKeyDemon(demonId);
+    const state = this.poisonDecayByKey.get(key);
+    const next = tickPoisonDecayState(demon.poisonStacks, state, now);
+    demon.poisonStacks = next.stacks;
+    if (next.state) {
+      this.poisonDecayByKey.set(key, next.state);
+    } else {
+      this.poisonDecayByKey.delete(key);
+    }
+  }
+
+  private tryBodyShieldShockwave(
+    sessionId: string,
+    player: Player,
+    now: number,
+  ) {
+    const at = this.bodyShieldShockwaveAt.get(sessionId);
+    if (at === undefined || now < at) return;
+    this.bodyShieldShockwaveAt.delete(sessionId);
+    if (player.daoPath !== "body" || player.currentQi <= 0) return;
+    this.hitPlayersInMelee(
+      player,
+      sessionId,
+      BODY_SHIELD_END_SHOCKWAVE_RADIUS,
+      BODY_SHIELD_END_SHOCKWAVE_DAMAGE,
+      false,
+    );
+    this.hitDemonsInMelee(
+      player,
+      BODY_SHIELD_END_SHOCKWAVE_RADIUS,
+      BODY_SHIELD_END_SHOCKWAVE_DAMAGE,
+      false,
+    );
   }
 
   private dealDamageToPlayer(
@@ -992,7 +1108,7 @@ export class XianRoom extends Room {
     let damage = rawDamage;
 
     if (applyPathOnHit && attacker.daoPath === "shadow") {
-      target.poisonStacks = addPoisonStack(target.poisonStacks);
+      this.applyPoisonToPlayer(targetId, target, now);
     }
     if (applyPathOnHit && attacker.daoPath === "body") {
       const angle = Math.atan2(target.y - attacker.y, target.x - attacker.x);
@@ -1061,8 +1177,9 @@ export class XianRoom extends Room {
     player.x = pos.x;
     player.y = pos.y;
     player.currentQi = RESPAWN_QI;
-    player.poisonStacks = 0;
+    this.clearPoisonPlayer(sessionId, player);
     player.overloadStacks = 0;
+    this.bodyShieldShockwaveAt.delete(sessionId);
     player.stunUntil = 0;
     player.slowUntil = 0;
     player.shieldUntil = 0;
@@ -1076,6 +1193,7 @@ export class XianRoom extends Room {
     if (killer) {
       killer.vassana = addVassanaOnDemonKill(killer.vassana);
     }
+    this.poisonDecayByKey.delete(this.poisonKeyDemon(demonId));
     this.state.demons.delete(demonId);
     this.clock.setTimeout(() => this.tryRespawnDemon(demon.zoneId, kind), 4000);
   }
