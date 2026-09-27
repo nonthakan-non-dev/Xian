@@ -1,6 +1,6 @@
 # Xian IO
 
-ห้องเกม multiplayer บนเว็บ ธีมเทพเซียน — เก็บลมปราณ ขึ้นขั้นฝึก เลือกสายวิชา ต่อสู้และดวลในห้องเดียว
+ห้องเกม multiplayer บนเว็บ ธีมเทพเซียน — เก็บลมปราณ ขึ้นขั้นฝึก สุ่มเลือกสกิลเมื่อเลื่อนขั้น ต่อสู้และดวลในห้องเดียว
 
 ## Language
 
@@ -9,12 +9,28 @@
 _Avoid_: HP, พลัง (ใน UI แสดงว่า「พลังปราณ」แต่ในโค้ดใช้ CurrentQi)
 
 **RealmFloor**:
-ขั้นฝึกสูงสุดที่ผู้เล่นเคยถึงในห้องนี้ (หนึ่งถึงเจ็ด)
+ขั้นฝึกสูงสุดที่ผู้เล่นเคยถึงในห้องนี้ (หนึ่งถึงยี่สิบห้า ตามแคตตาล็อก *ฝืนลิขิตฟ้า*)
 _Avoid_: ระดับ, Level, Realm อย่างเดียวเมื่อหมายถึง floor
 
-**DaoPath**:
-สายวิชาที่เลือกครั้งเดียวเมื่อถึงขั้น「สร้างฐานปราณ」
-_Avoid_: คลาส, อาชีพ
+**QiLayer**:
+ชั้นย่อยหนิงชี่ (หนึ่งถึงสิบห้า) เฉพาะเมื่อ RealmFloor อยู่ที่ขั้นรวมลมปราณ
+_Avoid_: sublevel, ระดับเล็ก
+
+**CultivationSkill**:
+วิชา/สกิลหนึ่งรายการจากพูลของขั้นฝึก มีผล passive หรือ active ในการต่อสู้
+_Avoid_: spell, ability ทั่วไปเมื่อหมายถึงของขั้นฝึก
+
+**SkillLoadout**:
+รายการ CultivationSkill ที่ผู้เล่นเลือกสะสมแล้วในห้อง (เริ่มว่างเมื่อ join)
+_Avoid_: deck, loadout ทั่วไป
+
+**SkillDraft**:
+ช่วงหลัง RealmFloor ขึ้น — server สุ่มสาม CultivationSkill จากพูลสิบของขั้นที่ถึง (ไม่รวมที่มีแล้ว) ผู้เล่นเลือกหนึ่งจากสามใน modal ก่อนเล่นต่อ
+_Avoid_: PathChoice, class select, gacha
+
+**WeakBasic**:
+การโจมตีพื้นฐานอ่อนในหนิงชี่ก่อนมีสkill จาก SkillDraft ครั้งแรก
+_Avoid_: starter class
 
 **LingqiOrb**:
 ลิงหปราณบนแผนที่ เก็บแล้วเพิ่ม CurrentQi
@@ -25,11 +41,15 @@ _Avoid_: orb, pickup
 _Avoid_: herb item
 
 **HerbBuff**:
-สถานะชั่วคราวหลังเก็บ SpiritHerb โบนัสตาม DaoPath
+สถานะชั่วคราวหลังเก็บ SpiritHerb โบนัสชั่วคราว (ไม่ผูกสายวิชา)
 _Avoid_: buff ทั่วไป
 
-**PathChoice**:
-ช่วงที่ผู้เล่นต้องเลือก DaoPath จาก modal หลังขึ้นขั้นสอง
+**DaoPath** _(legacy — กำลังถูกแทนที่)_:
+สายวิชาเดิมสี่ทาง — จะถูกถอดเมื่อ SkillDraft ใช้งาน
+_Avoid_: คลาส, อาชีพ
+
+**PathChoice** _(legacy)_:
+ช่วงเลือก DaoPath เดิม — แทนที่ด้วย SkillDraft
 _Avoid_: class select
 
 **Challenge**:

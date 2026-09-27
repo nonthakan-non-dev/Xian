@@ -13,6 +13,10 @@
 | 7 | [xian-06-dao-path.md](./xian-06-dao-path.md) | 05b |
 | 8 | [xian-07-duel-flow.md](./xian-07-duel-flow.md) | 06 |
 | 9 | [xian-08-xian-feel.md](./xian-08-xian-feel.md) | 07 |
+| 10 | [xian-09-cultivation-ladder.md](./xian-09-cultivation-ladder.md) | 08 (แนะนำ) |
+| 10a | [xian-10a-skill-pools-content.md](./xian-10a-skill-pools-content.md) | — |
+| 11 | [xian-10-skill-draft.md](./xian-10-skill-draft.md) | 09 + 10a |
 
 **Playable MVP:** หลังปิด xian-07  
+**Post-MVP:** xian-09 (realms) → xian-10a (250 skills content) → xian-10 (draft combat)  
 **Spec:** [docs/spec-xian-io.md](../../../docs/spec-xian-io.md) · **Glossary:** [CONTEXT.md](../../../CONTEXT.md)
