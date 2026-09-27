@@ -31,7 +31,6 @@ import {
   isBodyStunImmune,
   isCombatKitActive,
   isInAttackArc,
-  isValidDaoPath,
   LIGHTNING_AOE_RADIUS,
   MAP_HEIGHT,
   MAP_WIDTH,
@@ -56,7 +55,6 @@ import {
   rollOrbWithVassana,
   SHADOW_WARP_RANGE,
   SHIELD_DURATION_MS,
-  shouldAwaitPathChoice,
   SLOW_MS,
   STUN_MS,
   shadowStealthSpeedBonus,
@@ -167,16 +165,6 @@ export class XianRoom extends Room {
         );
       },
     );
-
-    this.onMessage("choosePath", (client, data: { path?: string }) => {
-      const player = this.state.players.get(client.sessionId);
-      if (!player) return;
-      const path = String(data.path ?? "");
-      if (!isValidDaoPath(path)) return;
-      if (!player.awaitingPathChoice) return;
-      player.daoPath = path;
-      player.awaitingPathChoice = false;
-    });
 
     this.onMessage(
       "challenge",
@@ -432,10 +420,8 @@ export class XianRoom extends Room {
     return m;
   }
 
-  private afterRealmPromote(player: Player) {
-    if (shouldAwaitPathChoice(player.realmFloor, player.daoPath)) {
-      player.awaitingPathChoice = true;
-    }
+  private afterRealmPromote(_player: Player) {
+    // SkillDraft (xian-10) will hook realm promotion here.
   }
 
   private tick() {

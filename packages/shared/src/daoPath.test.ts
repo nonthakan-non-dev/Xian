@@ -16,17 +16,15 @@ import {
 } from "./daoPath.js";
 
 describe("isCombatKitActive", () => {
-  it("requires path chosen and not awaiting modal", () => {
+  it("is always active without PathChoice gate", () => {
+    expect(isCombatKitActive(1, "", false)).toBe(true);
+    expect(isCombatKitActive(2, "", false)).toBe(true);
     expect(isCombatKitActive(2, "sword", false)).toBe(true);
-    expect(isCombatKitActive(1, "sword", false)).toBe(true);
-    expect(isCombatKitActive(2, "", false)).toBe(false);
-    expect(isCombatKitActive(2, "sword", true)).toBe(false);
   });
 
-  it("combatKitBlockReason blocks only before path unlock", () => {
-    expect(combatKitBlockReason(1, "sword", false)).toBe(null);
-    expect(combatKitBlockReason(1, "", false)).toBe("realm_low");
-    expect(combatKitBlockReason(2, "", true)).toBe("awaiting_path_choice");
+  it("combatKitBlockReason never blocks", () => {
+    expect(combatKitBlockReason(1, "", false)).toBe(null);
+    expect(combatKitBlockReason(2, "", true)).toBe(null);
   });
 });
 

@@ -2,14 +2,9 @@ import "./colyseus018JoinPatch.js";
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import {
-  DAO_PATH_IDS,
-  DAO_PATH_UI_TH,
-  daoPathAccentColor,
-  combatKitBlockReason,
   isInDuelZone,
   realmDisplayName,
   VASSANA_CAP,
-  type DaoPathChoice,
   type XianState,
 } from "@xian/shared";
 import { joinXianRoom } from "./joinRoom.js";
@@ -27,8 +22,6 @@ const statsEl = document.getElementById("stats")!;
 const leaderboardList = document.getElementById(
   "leaderboard-list",
 )! as HTMLOListElement;
-const pathOverlay = document.getElementById("path-overlay")!;
-const pathChoices = document.getElementById("path-choices")!;
 const challengeBanner = document.getElementById("challenge-banner")!;
 const challengeText = document.getElementById("challenge-text")!;
 const challengeAccept = document.getElementById(
@@ -39,48 +32,11 @@ const challengeDecline = document.getElementById(
 )! as HTMLButtonElement;
 const toast = document.getElementById("toast")!;
 
-const PATH_LABELS: Record<DaoPathChoice, string> = {
-  sword: "กระบี่",
-  body: "กายา",
-  lightning: "อัคนี",
-  shadow: "เงา",
-};
-
 let room: Room<XianState> | null = null;
-
-function accentCss(daoPath: string): string {
-  const n = daoPathAccentColor(daoPath);
-  return `#${n.toString(16).padStart(6, "0")}`;
-}
 
 const sfxMute = document.getElementById("sfx-mute") as HTMLInputElement;
 sfxMute.checked = isSfxMuted();
 sfxMute.addEventListener("change", () => setSfxMuted(sfxMute.checked));
-
-function setupPathModal() {
-  pathChoices.innerHTML = DAO_PATH_IDS.map((id) => {
-    const ui = DAO_PATH_UI_TH[id];
-    return `<button type="button" data-path="${id}"><strong>${ui.title}</strong>${ui.blurb}</button>`;
-  }).join("");
-  pathChoices.querySelectorAll("button[data-path]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      if (!room) return;
-      const path = (btn as HTMLButtonElement).dataset.path;
-      if (!path) return;
-      room.send("choosePath", { path });
-    });
-  });
-}
-
-function syncPathOverlay() {
-  if (!room) return;
-  const me = room.state.players.get(room.sessionId);
-  if (me?.awaitingPathChoice) {
-    pathOverlay.classList.remove("hidden");
-  } else {
-    pathOverlay.classList.add("hidden");
-  }
-}
 
 function showToast(message: string) {
   toast.textContent = message;
@@ -122,29 +78,12 @@ function updateHud() {
       100,
       Math.round((me.vassana / VASSANA_CAP) * 100),
     );
-    const pathLabel =
-      me.daoPath && PATH_LABELS[me.daoPath as DaoPathChoice]
-        ? PATH_LABELS[me.daoPath as DaoPathChoice]
-        : me.realmFloor >= 2 && !me.daoPath
-          ? "— เลือกสาย —"
-          : "—";
-    const kitBlock = combatKitBlockReason(
-      me.realmFloor,
-      me.daoPath,
-      me.awaitingPathChoice,
-    );
-    const kitOffHint =
-      kitBlock === "realm_low"
-        ? " (ปิด — สะสมพลังถึงขั้น 2 เพื่อเลือกสาย)"
-        : kitBlock === "awaiting_path_choice"
-          ? " (ปิด — เลือกสายวิชา)"
-          : "";
     const duelHint = me.inPocketDuel
       ? "<br/><em>⚔ PocketDuel</em>"
       : isInDuelZone(me.x, me.y)
         ? "<br/><em>วงดวล FFA</em>"
         : "";
-    statsEl.innerHTML = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>สาย: ${pathLabel}${kitOffHint}<br/>วาสนา: ${vassanaPct}%${duelHint}`;
+    statsEl.innerHTML = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>วาสนา: ${vassanaPct}%${duelHint}`;
   }
   const rows = [...room.state.players.values()]
     .filter((p) => p?.name)
@@ -156,12 +95,7 @@ function updateHud() {
         p.realmFloor as number,
         (p.qiLayer as number) ?? 1,
       );
-      const path =
-        p.daoPath && PATH_LABELS[p.daoPath as DaoPathChoice]
-          ? PATH_LABELS[p.daoPath as DaoPathChoice]
-          : "—";
-      const accent = p.daoPath ? accentCss(p.daoPath) : "#cccccc";
-      return `<li>${i + 1}. <span style="color:${accent}">${p.name}</span> · ${realm} · ${path} · ${Math.floor(p.currentQi)}</li>`;
+      return `<li>${i + 1}. ${p.name} · ${realm} · ${Math.floor(p.currentQi)}</li>`;
     })
     .join("");
 }
@@ -209,11 +143,9 @@ async function joinGame() {
 
     room.onStateChange(() => {
       updateHud();
-      syncPathOverlay();
       syncChallengeBanner();
     });
     updateHud();
-    syncPathOverlay();
     syncChallengeBanner();
 
     const game = new Phaser.Game({
@@ -250,7 +182,6 @@ async function joinGame() {
   }
 }
 
-setupPathModal();
 joinBtn.addEventListener("click", () => void joinGame());
 nameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") void joinGame();
