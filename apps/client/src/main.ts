@@ -4,6 +4,7 @@ import { Client, Room } from "colyseus.js";
 import {
   DAO_PATH_IDS,
   DAO_PATH_UI_TH,
+  daoPathAccentColor,
   isCombatKitActive,
   isInDuelZone,
   REALM_NAMES_TH,
@@ -12,6 +13,7 @@ import {
   type XianState,
 } from "@xian/shared";
 import { joinXianRoom } from "./joinRoom.js";
+import { isSfxMuted, setSfxMuted } from "./sfx.js";
 import { WorldScene } from "./WorldScene.js";
 
 const SERVER_URL =
@@ -45,6 +47,15 @@ const PATH_LABELS: Record<DaoPathChoice, string> = {
 };
 
 let room: Room<XianState> | null = null;
+
+function accentCss(daoPath: string): string {
+  const n = daoPathAccentColor(daoPath);
+  return `#${n.toString(16).padStart(6, "0")}`;
+}
+
+const sfxMute = document.getElementById("sfx-mute") as HTMLInputElement;
+sfxMute.checked = isSfxMuted();
+sfxMute.addEventListener("change", () => setSfxMuted(sfxMute.checked));
 
 function setupPathModal() {
   pathChoices.innerHTML = DAO_PATH_IDS.map((id) => {
@@ -131,10 +142,15 @@ function updateHud() {
     .sort((a, b) => b.currentQi - a.currentQi)
     .slice(0, 8);
   leaderboardList.innerHTML = rows
-    .map(
-      (p, i) =>
-        `<li>${i + 1}. ${p.name} — ${Math.floor(p.currentQi)}</li>`,
-    )
+    .map((p, i) => {
+      const realm = REALM_NAMES_TH[p.realmFloor as number] ?? "—";
+      const path =
+        p.daoPath && PATH_LABELS[p.daoPath as DaoPathChoice]
+          ? PATH_LABELS[p.daoPath as DaoPathChoice]
+          : "—";
+      const accent = p.daoPath ? accentCss(p.daoPath) : "#cccccc";
+      return `<li>${i + 1}. <span style="color:${accent}">${p.name}</span> · ${realm} · ${path} · ${Math.floor(p.currentQi)}</li>`;
+    })
     .join("");
 }
 
@@ -206,7 +222,7 @@ async function joinGame() {
         const mine = msg.sessionId === room!.sessionId;
         showToast(
           mine
-            ? "พลังปรานกระจาย — ฟื้นที่ขอบแผนที่"
+            ? "พลังปราณกระจาย — ฟื้นที่ขอบแผนที่"
             : `${msg.name} ล้ม — ลมปราณกระจาย`,
         );
       },

@@ -1,6 +1,6 @@
 # xian-08-xian-feel
 
-**Status:** todo  
+**Status:** done  
 **Blockers:** xian-07-duel-flow
 
 ## Goal
@@ -16,9 +16,9 @@ Polish vector + VFX/UI ไทยให้รู้สึกเทพเซีย
 
 ## Acceptance criteria
 
-- [ ] แยกสาย/ขั้นด้วยสีได้ชัดใน 2 แท็บ
-- [ ] DemonZone มองเห็นจากกล้องตามตัว (ขอบ/overlay)
-- [ ] ไม่ regression  gameplay จาก xian-07
+- [x] แยกสาย/ขั้นด้วยสีได้ชัดใน 2 แท็บ
+- [x] DemonZone มองเห็นจากกล้องตามตัว (ขอบ/overlay)
+- [x] ไม่ regression  gameplay จาก xian-07
 
 ## Spec refs
 

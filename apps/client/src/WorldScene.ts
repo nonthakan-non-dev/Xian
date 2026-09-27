@@ -4,16 +4,23 @@ import {
   DEMON_ZONES,
   DUEL_ZONES,
   isCombatKitActive,
+  isInAnyDemonZone,
   isInDuelZone,
   MAP_HEIGHT,
   MAP_WIDTH,
+  playerBodyRadius,
   type Player,
   type XianState,
 } from "@xian/shared";
-
-const REALM_COLORS = [
-  0x88ccff, 0x66aaff, 0x44ddaa, 0xddcc44, 0xdd8844, 0xcc44aa, 0xffeedd,
-];
+import { playSfx } from "./sfx.js";
+import {
+  applyPlayerColors,
+  drawSwordOrbit,
+  shadowStealthAlpha,
+  spawnBodyShieldPulse,
+  spawnLightningStrike,
+  spawnShadowWarpFlash,
+} from "./playerVfx.js";
 
 export class WorldScene extends Phaser.Scene {
   private room!: Room<XianState>;
@@ -25,6 +32,11 @@ export class WorldScene extends Phaser.Scene {
     D: Phaser.Input.Keyboard.Key;
   };
   private playerSprites = new Map<string, Phaser.GameObjects.Arc>();
+  private playerGlow = new Map<string, Phaser.GameObjects.Arc>();
+  private swordOrbits = new Map<string, Phaser.GameObjects.Graphics>();
+  private prevQi = new Map<string, number>();
+  private lastHitClientMs = new Map<string, number>();
+  private zoneHighlightGfx?: Phaser.GameObjects.Graphics;
   private orbSprites = new Map<string, Phaser.GameObjects.Arc>();
   private labels = new Map<string, Phaser.GameObjects.Text>();
   private demonSprites = new Map<string, Phaser.GameObjects.Arc>();
@@ -81,6 +93,8 @@ export class WorldScene extends Phaser.Scene {
       zoneGfx.lineStyle(3, 0xddbb44, 0.45);
       zoneGfx.strokeCircle(zone.cx, zone.cy, zone.radius);
     }
+
+    this.zoneHighlightGfx = this.add.graphics().setDepth(-4);
 
     if (this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
@@ -232,6 +246,7 @@ export class WorldScene extends Phaser.Scene {
     if (!me) return;
     this.setFacingToward(worldX, worldY, me.x, me.y);
     this.room.send("attack", { aimX: worldX, aimY: worldY });
+    playSfx("hit");
     const flash = this.add.circle(me.x, me.y, 28, 0xffeedd, 0.25);
     flash.setDepth(9);
     this.tweens.add({
@@ -253,6 +268,15 @@ export class WorldScene extends Phaser.Scene {
       worldY = aim.aimY;
     }
     this.room.send("skill", { aimX: worldX, aimY: worldY });
+    playSfx("skill");
+    const r = playerBodyRadius(me.realmFloor);
+    if (me.daoPath === "lightning") {
+      spawnLightningStrike(this, worldX, worldY);
+    } else if (me.daoPath === "body") {
+      spawnBodyShieldPulse(this, me.x, me.y, r);
+    } else if (me.daoPath === "shadow") {
+      spawnShadowWarpFlash(this, worldX, worldY);
+    }
     const flash = this.add.circle(me.x, me.y, 36, 0xaaccff, 0.35);
     flash.setDepth(9);
     this.tweens.add({
@@ -275,8 +299,14 @@ export class WorldScene extends Phaser.Scene {
     for (const id of this.playerSprites.keys()) {
       if (!playerIds.has(id)) {
         this.playerSprites.get(id)?.destroy();
+        this.playerGlow.get(id)?.destroy();
+        this.swordOrbits.get(id)?.destroy();
         this.labels.get(id)?.destroy();
         this.playerSprites.delete(id);
+        this.playerGlow.delete(id);
+        this.swordOrbits.delete(id);
+        this.prevQi.delete(id);
+        this.lastHitClientMs.delete(id);
         this.labels.delete(id);
       }
     }
@@ -367,12 +397,22 @@ export class WorldScene extends Phaser.Scene {
       this.sendChallengeToNearest();
     }
 
+    this.updateDemonZoneHighlight();
+
     for (const [id, p] of this.room.state.players) {
       if (!this.playerSprites.has(id)) {
         this.ensurePlayer(id, p);
       }
       const sprite = this.playerSprites.get(id);
+      const glow = this.playerGlow.get(id);
+      const orbit = this.swordOrbits.get(id);
       if (sprite) {
+        const prev = this.prevQi.get(id) ?? p.currentQi;
+        if (p.currentQi < prev - 0.01) {
+          this.lastHitClientMs.set(id, now);
+        }
+        this.prevQi.set(id, p.currentQi);
+
         const isSelf = id === this.room.sessionId;
         const snapDist = isSelf ? 72 : 140;
         const dist = Phaser.Math.Distance.Between(sprite.x, sprite.y, p.x, p.y);
@@ -383,10 +423,23 @@ export class WorldScene extends Phaser.Scene {
           sprite.x = Phaser.Math.Linear(sprite.x, p.x, follow);
           sprite.y = Phaser.Math.Linear(sprite.y, p.y, follow);
         }
+        if (glow) {
+          glow.x = sprite.x;
+          glow.y = sprite.y;
+        }
+        sprite.setAlpha(
+          shadowStealthAlpha(p, this.lastHitClientMs.get(id), now),
+        );
+        if (orbit) {
+          drawSwordOrbit(orbit, sprite.x, sprite.y, p, now / 1000);
+        }
+        if (glow) {
+          applyPlayerColors(sprite, glow, p);
+        }
         const label = this.labels.get(id);
         if (label) {
           label.x = sprite.x;
-          label.y = sprite.y - 28;
+          label.y = sprite.y - playerBodyRadius(p.realmFloor) - 16;
         }
       }
     }
@@ -416,12 +469,32 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  private updateDemonZoneHighlight() {
+    const g = this.zoneHighlightGfx;
+    const me = this.room?.state.players.get(this.room.sessionId);
+    if (!g || !me) return;
+    g.clear();
+    const inside = isInAnyDemonZone(me.x, me.y);
+    for (const zone of DEMON_ZONES) {
+      const d = Phaser.Math.Distance.Between(me.x, me.y, zone.cx, zone.cy);
+      if (d > zone.radius + 420) continue;
+      const alpha = d <= zone.radius ? 0.2 : inside ? 0.12 : 0.07;
+      g.fillStyle(0xcc3344, alpha);
+      g.fillCircle(zone.cx, zone.cy, zone.radius);
+      g.lineStyle(
+        inside && d <= zone.radius ? 4 : 2,
+        0xff6677,
+        inside ? 0.55 : 0.25,
+      );
+      g.strokeCircle(zone.cx, zone.cy, zone.radius);
+    }
+  }
+
   private syncPlayerVisual(id: string, p: Player) {
     const sprite = this.playerSprites.get(id);
-    if (sprite) {
-      const color = REALM_COLORS[(p.realmFloor - 1) % REALM_COLORS.length];
-      sprite.setFillStyle(color, 1);
-      sprite.setRadius(14 + p.realmFloor * 2);
+    const glow = this.playerGlow.get(id);
+    if (sprite && glow) {
+      applyPlayerColors(sprite, glow, p);
     }
     const label = this.labels.get(id);
     if (label) {
@@ -434,16 +507,23 @@ export class WorldScene extends Phaser.Scene {
 
   private ensurePlayer(id: string, p: Player) {
     if (this.playerSprites.has(id)) return;
-    const color = REALM_COLORS[(p.realmFloor - 1) % REALM_COLORS.length];
-    const r = 14 + p.realmFloor * 2;
-    const arc = this.add.circle(p.x, p.y, r, color, 1);
+    const r = playerBodyRadius(p.realmFloor);
+    const glow = this.add.circle(p.x, p.y, r + 14, 0x446688, 0.22);
+    glow.setDepth(9);
+    const arc = this.add.circle(p.x, p.y, r, 0x88ccff, 1);
     arc.setDepth(10);
-    arc.setStrokeStyle(2, 0xffffff, 0.6);
+    const orbit = this.add.graphics().setDepth(10);
+    applyPlayerColors(arc, glow, p);
+    this.playerGlow.set(id, glow);
     this.playerSprites.set(id, arc);
+    this.swordOrbits.set(id, orbit);
+    this.prevQi.set(id, p.currentQi);
     const label = this.add
-      .text(p.x, p.y - 28, p.name, {
-        fontSize: "14px",
-        color: "#ffffff",
+      .text(p.x, p.y - r - 16, p.name, {
+        fontSize: "13px",
+        color: "#e8f4ff",
+        stroke: "#0a1218",
+        strokeThickness: 2,
       })
       .setOrigin(0.5)
       .setDepth(11);
