@@ -316,7 +316,12 @@ export class XianRoom extends Room {
     this.lastFlyingSwordMs.set(player.sessionId, now);
 
     for (let i = 0; i < count; i++) {
-      const target = this.nearestHostile(player.x, player.y, FLYING_SWORD_RANGE);
+      const target = this.nearestHostile(
+        player.x,
+        player.y,
+        FLYING_SWORD_RANGE,
+        player.sessionId,
+      );
       if (!target) break;
       if (target.kind === "player") {
         this.dealDamageToPlayer(
@@ -340,6 +345,7 @@ export class XianRoom extends Room {
     x: number,
     y: number,
     range: number,
+    excludeSessionId?: string,
   ):
     | { kind: "player"; id: string; entity: Player }
     | { kind: "demon"; id: string; entity: Demon }
@@ -350,7 +356,7 @@ export class XianRoom extends Room {
       | undefined;
 
     for (const [id, p] of this.state.players) {
-      if (p.currentQi <= 0) continue;
+      if (id === excludeSessionId || p.currentQi <= 0) continue;
       const d = distPoint(x, y, p.x, p.y);
       if (d <= range && (!best || d < best.dist)) {
         best = { kind: "player", id, entity: p, dist: d };
