@@ -1,0 +1,136 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Sukhumvit Set", "Noto Sans Thai", system-ui, sans-serif;
+  background: #0a0f14;
+  color: #e8f0ff;
+  overflow: hidden;
+}
+
+#game {
+  width: 100vw;
+  height: 100vh;
+}
+
+#join-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 30%, #1a2840, #05080c);
+  z-index: 10;
+}
+
+#join-overlay.hidden {
+  display: none;
+}
+
+.panel {
+  text-align: center;
+  padding: 2rem;
+  border: 1px solid #3a5a8a;
+  border-radius: 12px;
+  background: rgba(10, 20, 35, 0.9);
+  min-width: 280px;
+}
+
+.panel input {
+  width: 100%;
+  padding: 0.75rem;
+  margin: 1rem 0;
+  border-radius: 8px;
+  border: 1px solid #4a6a9a;
+  background: #0d1520;
+  color: inherit;
+  font-size: 1rem;
+}
+
+.panel button {
+  width: 100%;
+  padding: 0.75rem;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #4a90d9, #2a6099);
+  color: white;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+#hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 5;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+#hud.hidden {
+  display: none;
+}
+
+#stats {
+  background: rgba(0, 0, 0, 0.45);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+#leaderboard {
+  background: rgba(0, 0, 0, 0.45);
+  padding: 8px 12px;
+  border-radius: 8px;
+  min-width: 180px;
+  max-width: 240px;
+}
+
+#leaderboard h2 {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+#leaderboard-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 0.8rem;
+}
+
+#toast {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 8;
+  padding: 12px 20px;
+  border-radius: 10px;
+  background: rgba(40, 10, 10, 0.85);
+  border: 1px solid #aa4444;
+  font-size: 1rem;
+  pointer-events: none;
+}
+
+#toast.hidden {
+  display: none;
+}
+
+.hint {
+  position: fixed;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  font-size: 0.75rem;
+  opacity: 0.65;
+  z-index: 5;
+}

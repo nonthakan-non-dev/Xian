@@ -1,0 +1,21 @@
+{
+  "name": "xian-io",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "pnpm -C packages/shared build && concurrently -n server,client -c blue,green \"pnpm -C apps/server dev\" \"pnpm -C apps/client dev\"",
+    "dev:clean": "node scripts/kill-dev-ports.mjs && pnpm dev",
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@colyseus/schema": "5.0.34"
+    }
+  }
+}

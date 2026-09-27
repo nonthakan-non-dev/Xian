@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>仙 Xian IO</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="join-overlay">
+      <div class="panel">
+        <h1>仙 · เทพเซียน IO</h1>
+        <p>ใส่ชื่อแล้วเข้าห้องฝึก (local MVP)</p>
+        <input id="name-input" type="text" maxlength="24" placeholder="ชื่อนักบำเพ็ต" />
+        <button id="join-btn" type="button">เข้าโลก</button>
+      </div>
+    </div>
+    <div id="hud" class="hidden">
+      <div id="stats"></div>
+      <div id="leaderboard">
+        <h2>อันดับพลังปราณ</h2>
+        <ol id="leaderboard-list"></ol>
+      </div>
+      <p class="hint">WASD — เก็บลมปราณ · คลิก/Space โจมตี · เข้าวงแดงล่าอสูร</p>
+    </div>
+    <div id="toast" class="hidden" role="status"></div>
+    <div id="game"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
