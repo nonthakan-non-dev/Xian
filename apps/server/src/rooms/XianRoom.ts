@@ -443,7 +443,10 @@ export class XianRoom extends Room {
     const now = this.nowMs();
 
     for (const [sessionId, player] of this.state.players) {
-      if (player.currentQi <= 0) continue;
+      if (player.currentQi <= 0) {
+        this.killPlayer(player, sessionId, 0);
+        continue;
+      }
 
       player.vassana = tickVassana(
         player.vassana,

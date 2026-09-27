@@ -167,7 +167,7 @@ flowchart TD
 
 - **RealmFloor < 2:** `daoPath = null` — ไม่มี combat สาย (เคลื่อนที่ + เก็บของ)
 - **RealmFloor ≥ 2 ครั้งแรก:** `awaitingPathChoice = true` → modal 4 ทาง → เลือกแล้ว **ถาวรในห้อง**
-- **RealmFloor ตก < 2:** จำ `daoPath` แต่ **ปิด kit** จนกลับ ≥ 2 (ไม่เปิด modal ใหม่)
+- **RealmFloor ตก < 2:** จำ `daoPath` — **kit ยังใช้ได้** (ไม่เปิด modal ใหม่)
 
 ### 6.2 การควบคุม (client → server)
 

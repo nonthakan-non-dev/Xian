@@ -54,11 +54,22 @@ export function isCombatKitActive(
   daoPath: string,
   awaitingPathChoice: boolean,
 ): boolean {
-  return (
-    realmFloor >= PATH_CHOICE_REALM &&
-    !awaitingPathChoice &&
-    daoPath !== ""
-  );
+  return combatKitBlockReason(realmFloor, daoPath, awaitingPathChoice) === null;
+}
+
+export type CombatKitBlockReason =
+  | "realm_low"
+  | "awaiting_path_choice";
+
+/** Why LMB/Space/Skill are disabled — null means kit is active. */
+export function combatKitBlockReason(
+  realmFloor: number,
+  daoPath: string,
+  awaitingPathChoice: boolean,
+): CombatKitBlockReason | null {
+  if (daoPath !== "" && !awaitingPathChoice) return null;
+  if (realmFloor < PATH_CHOICE_REALM) return "realm_low";
+  return "awaiting_path_choice";
 }
 
 export function shouldAwaitPathChoice(

@@ -6,6 +6,7 @@ import {
   flyingSwordMaxPassiveDps,
   FLYING_SWORD_DAMAGE,
   FLYING_SWORD_INTERVAL_MS,
+  combatKitBlockReason,
   isCombatKitActive,
   OVERLOAD_STACKS_FOR_CRIT,
   overloadOnSkillUse,
@@ -15,11 +16,17 @@ import {
 } from "./daoPath.js";
 
 describe("isCombatKitActive", () => {
-  it("requires realm 2+, path chosen, not awaiting modal", () => {
+  it("requires path chosen and not awaiting modal", () => {
     expect(isCombatKitActive(2, "sword", false)).toBe(true);
-    expect(isCombatKitActive(1, "sword", false)).toBe(false);
+    expect(isCombatKitActive(1, "sword", false)).toBe(true);
     expect(isCombatKitActive(2, "", false)).toBe(false);
     expect(isCombatKitActive(2, "sword", true)).toBe(false);
+  });
+
+  it("combatKitBlockReason blocks only before path unlock", () => {
+    expect(combatKitBlockReason(1, "sword", false)).toBe(null);
+    expect(combatKitBlockReason(1, "", false)).toBe("realm_low");
+    expect(combatKitBlockReason(2, "", true)).toBe("awaiting_path_choice");
   });
 });
 

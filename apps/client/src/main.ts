@@ -5,7 +5,7 @@ import {
   DAO_PATH_IDS,
   DAO_PATH_UI_TH,
   daoPathAccentColor,
-  isCombatKitActive,
+  combatKitBlockReason,
   isInDuelZone,
   REALM_NAMES_TH,
   VASSANA_CAP,
@@ -125,17 +125,23 @@ function updateHud() {
         : me.realmFloor >= 2 && !me.daoPath
           ? "— เลือกสาย —"
           : "—";
-    const kit = isCombatKitActive(
+    const kitBlock = combatKitBlockReason(
       me.realmFloor,
       me.daoPath,
       me.awaitingPathChoice,
     );
+    const kitOffHint =
+      kitBlock === "realm_low"
+        ? " (ปิด — สะสมพลังถึงขั้น 2 เพื่อเลือกสาย)"
+        : kitBlock === "awaiting_path_choice"
+          ? " (ปิด — เลือกสายวิชา)"
+          : "";
     const duelHint = me.inPocketDuel
       ? "<br/><em>⚔ PocketDuel</em>"
       : isInDuelZone(me.x, me.y)
         ? "<br/><em>วงดวล FFA</em>"
         : "";
-    statsEl.innerHTML = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>สาย: ${pathLabel}${kit ? "" : " (ปิด)"}<br/>วาสนา: ${vassanaPct}%${duelHint}`;
+    statsEl.innerHTML = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>สาย: ${pathLabel}${kitOffHint}<br/>วาสนา: ${vassanaPct}%${duelHint}`;
   }
   const rows = [...room.state.players.values()]
     .filter((p) => p?.name)
