@@ -6,3 +6,4 @@ export * from "./vassana.js";
 export * from "./demons.js";
 export * from "./status.js";
 export * from "./daoPath.js";
+export * from "./duel.js";

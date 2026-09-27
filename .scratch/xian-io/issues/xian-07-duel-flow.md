@@ -1,6 +1,6 @@
 # xian-07-duel-flow
 
-**Status:** todo  
+**Status:** done  
 **Blockers:** xian-06-dao-path
 
 ## Goal
@@ -16,11 +16,11 @@ PocketDuel (mutual) + DuelZone FFA ครบกติกา — **playable MVP**
 
 ## Acceptance criteria
 
-- [ ] ท้าดวลนอกวง → pocket → มีผู้ชนะตาม Qi
-- [ ] แพ้ pocket → realm ลง (ถ้า >1) + Qi transfer
-- [ ] ในวง FFA ตาย → ออกวง + orbs
-- [ ] ท้าดวลในวงถูก reject
-- [ ] Vitest: `tryStartChallenge`, `resolvePocketDuel`
+- [x] ท้าดวลนอกวง → pocket → มีผู้ชนะตาม Qi
+- [x] แพ้ pocket → realm ลง (ถ้า >1) + Qi transfer
+- [x] ในวง FFA ตาย → ออกวง + orbs
+- [x] ท้าดวลในวงถูก reject
+- [x] Vitest: `tryStartChallenge`, `resolvePocketDuel`
 
 ## Spec refs
 

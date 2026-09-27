@@ -21,13 +21,22 @@
         <h2>อันดับพลังปราณ</h2>
         <ol id="leaderboard-list"></ol>
       </div>
-      <p class="hint">WASD — เก็บลมปราณ · คลิก/Space โจมตี · Shift สกิล · สมุนไพรเขียว · เข้าวงแดงล่าอสูร</p>
+      <p class="hint">WASD · คลิก/Space โจมตี · Shift สกิล · C ท้าดวล · วงทอง FFA · วงแดงอสูร</p>
     </div>
     <div id="path-overlay" class="hidden" role="dialog" aria-modal="true">
       <div class="panel path-panel">
         <h2>สร้างฐานปราณ — เลือกสายวิชา</h2>
         <p class="path-note">เลือกครั้งเดียวในห้องนี้</p>
         <div id="path-choices" class="path-grid"></div>
+      </div>
+    </div>
+    <div id="challenge-banner" class="hidden">
+      <div class="panel challenge-panel">
+        <p id="challenge-text"></p>
+        <div class="challenge-actions">
+          <button id="challenge-accept" type="button">ยอมดวล</button>
+          <button id="challenge-decline" type="button">ปฏิเสธ</button>
+        </div>
       </div>
     </div>
     <div id="toast" class="hidden" role="status"></div>

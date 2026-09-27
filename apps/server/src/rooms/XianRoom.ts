@@ -61,8 +61,18 @@ import {
   maxQiForRealm,
   tickVassana,
   TICK_RATE_MS,
+  canEngagePvP,
+  isInDuelZone,
+  isMutualChallenge,
+  tryStartChallenge,
 } from "@xian/shared";
 import { Demon, Herb, Orb, Player, XianState } from "../schema.js";
+import {
+  applyPocketStart,
+  applyPocketEnd,
+  clearChallengeState,
+  initDuelFields,
+} from "./duelLogic.js";
 
 let orbCounter = 0;
 let demonCounter = 0;
@@ -161,6 +171,21 @@ export class XianRoom extends Room {
       player.awaitingPathChoice = false;
     });
 
+    this.onMessage(
+      "challenge",
+      (client, data: { targetId?: string }) => {
+        this.handleChallenge(client.sessionId, String(data.targetId ?? ""));
+      },
+    );
+
+    this.onMessage("acceptChallenge", (client) => {
+      this.handleAcceptChallenge(client.sessionId);
+    });
+
+    this.onMessage("declineChallenge", (client) => {
+      this.handleDeclineChallenge(client.sessionId);
+    });
+
     this.setSimulationInterval(() => this.tick(), TICK_RATE_MS);
 
     this.spawnOrbs(ORB_TARGET_COUNT);
@@ -190,14 +215,154 @@ export class XianRoom extends Room {
     player.shieldUntil = 0;
     player.herbBuffUntil = 0;
     player.lastDamagedAt = 0;
+    initDuelFields(player);
     this.state.players.set(client.sessionId, player);
   }
 
   onLeave(client: Client) {
+    const player = this.state.players.get(client.sessionId);
+    if (player?.inPocketDuel) {
+      const opp = this.state.players.get(player.pocketOpponentId);
+      if (opp) {
+        this.finishPocketDuel(opp, player, player.currentQi);
+      }
+    }
+    this.clearChallengesInvolving(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.lastAttackMs.delete(client.sessionId);
     this.lastSkillMs.delete(client.sessionId);
     this.lastFlyingSwordMs.delete(client.sessionId);
+  }
+
+  private clearChallengesInvolving(sessionId: string) {
+    for (const p of this.state.players.values()) {
+      if (p.challengeTo === sessionId) {
+        p.challengeTo = "";
+      }
+      if (p.challengeFrom === sessionId) {
+        p.challengeFrom = "";
+      }
+    }
+  }
+
+  private validateChallengePair(
+    challenger: Player,
+    target: Player,
+  ): { ok: true } | { ok: false; reason: string } {
+    const gate = tryStartChallenge({
+      challengerInDuelZone: isInDuelZone(challenger.x, challenger.y),
+      targetInDuelZone: isInDuelZone(target.x, target.y),
+      challengerInPocket: challenger.inPocketDuel,
+      targetInPocket: target.inPocketDuel,
+    });
+    if (!gate.ok) return gate;
+    if (challenger.currentQi <= 0 || target.currentQi <= 0) {
+      return { ok: false, reason: "invalid" };
+    }
+    return { ok: true };
+  }
+
+  private handleChallenge(challengerId: string, targetId: string) {
+    if (!targetId || challengerId === targetId) return;
+    const challenger = this.state.players.get(challengerId);
+    const target = this.state.players.get(targetId);
+    if (!challenger || !target) return;
+
+    const gate = this.validateChallengePair(challenger, target);
+    if (!gate.ok) {
+      const client = this.clients.find((c) => c.sessionId === challengerId);
+      client?.send("challengeRejected", { reason: gate.reason });
+      return;
+    }
+
+    if (isMutualChallenge(challengerId, target.challengeTo)) {
+      this.startPocketDuel(challenger, target);
+      return;
+    }
+
+    challenger.challengeTo = targetId;
+    target.challengeFrom = challengerId;
+    const targetClient = this.clients.find((c) => c.sessionId === targetId);
+    targetClient?.send("challengeReceived", {
+      fromId: challengerId,
+      fromName: challenger.name,
+    });
+  }
+
+  private handleAcceptChallenge(accepterId: string) {
+    const accepter = this.state.players.get(accepterId);
+    if (!accepter?.challengeFrom) return;
+    const challenger = this.state.players.get(accepter.challengeFrom);
+    if (!challenger) {
+      accepter.challengeFrom = "";
+      return;
+    }
+    const gate = this.validateChallengePair(challenger, accepter);
+    if (!gate.ok) {
+      clearChallengeState(challenger);
+      clearChallengeState(accepter);
+      const client = this.clients.find((c) => c.sessionId === accepterId);
+      client?.send("challengeRejected", { reason: gate.reason });
+      return;
+    }
+    this.startPocketDuel(challenger, accepter);
+  }
+
+  private handleDeclineChallenge(accepterId: string) {
+    const accepter = this.state.players.get(accepterId);
+    if (!accepter?.challengeFrom) return;
+    const fromId = accepter.challengeFrom;
+    const challenger = this.state.players.get(fromId);
+    if (challenger?.challengeTo === accepterId) {
+      challenger.challengeTo = "";
+    }
+    accepter.challengeFrom = "";
+  }
+
+  private startPocketDuel(a: Player, b: Player) {
+    applyPocketStart(a, b);
+    this.broadcast("pocketDuelStart", {
+      aName: a.name,
+      bName: b.name,
+    });
+  }
+
+  private finishPocketDuel(
+    winner: Player,
+    loser: Player,
+    loserQiBeforeZero: number,
+  ) {
+    const transfer = applyPocketEnd(
+      winner,
+      loser,
+      loserQiBeforeZero,
+      RESPAWN_QI,
+    );
+    loser.poisonStacks = 0;
+    loser.overloadStacks = 0;
+    loser.stunUntil = 0;
+    loser.slowUntil = 0;
+    loser.shieldUntil = 0;
+    this.broadcast("pocketDuelEnd", {
+      winnerName: winner.name,
+      loserName: loser.name,
+      transfer,
+    });
+  }
+
+  private playersCanFight(a: Player, b: Player): boolean {
+    return canEngagePvP(
+      {
+        inPocketDuel: a.inPocketDuel,
+        pocketOpponentId: a.pocketOpponentId,
+        sessionId: a.sessionId,
+      },
+      {
+        inPocketDuel: b.inPocketDuel,
+        pocketOpponentId: b.pocketOpponentId,
+        sessionId: b.sessionId,
+      },
+    );
   }
 
   private nowMs(): number {
@@ -296,7 +461,9 @@ export class XianRoom extends Room {
             const sid = [...this.state.players.entries()].find(
               ([, p]) => p === player,
             )?.[0];
-            if (sid) this.killPlayer(player, sid, prevQi);
+            if (sid) {
+              this.handlePlayerEliminated(player, sid, prevQi, undefined);
+            }
           }
         }
       }
@@ -366,14 +533,17 @@ export class XianRoom extends Room {
       );
       if (!target) break;
       if (target.kind === "player") {
-        this.dealDamageToPlayer(
-          player,
-          target.entity as Player,
-          target.id,
-          FLYING_SWORD_DAMAGE,
-          false,
-          false,
-        );
+        const foe = target.entity as Player;
+        if (this.playersCanFight(player, foe)) {
+          this.dealDamageToPlayer(
+            player,
+            foe,
+            target.id,
+            FLYING_SWORD_DAMAGE,
+            false,
+            false,
+          );
+        }
       } else {
         const demon = target.entity as Demon;
         this.damageDemonAt(demon, FLYING_SWORD_DAMAGE);
@@ -399,7 +569,9 @@ export class XianRoom extends Room {
       | undefined;
 
     for (const [id, p] of this.state.players) {
-      if (id === excludeSessionId || p.currentQi <= 0) continue;
+      if (id === excludeSessionId || p.currentQi <= 0 || p.inPocketDuel) {
+        continue;
+      }
       const d = distPoint(x, y, p.x, p.y);
       if (d <= range && (!best || d < best.dist)) {
         best = { kind: "player", id, entity: p, dist: d };
@@ -551,6 +723,7 @@ export class XianRoom extends Room {
     const damage = resolveActiveDamage("sword", crit);
     for (const [id, target] of this.state.players) {
       if (target === attacker || target.currentQi <= 0) continue;
+      if (!this.playersCanFight(attacker, target)) continue;
       if (this.pointNearSegment(target.x, target.y, startX, startY, attacker.x, attacker.y, 48)) {
         this.dealDamageToPlayer(attacker, target, id, damage, false, crit);
       }
@@ -608,6 +781,7 @@ export class XianRoom extends Room {
 
     for (const [id, target] of this.state.players) {
       if (target === attacker || target.currentQi <= 0) continue;
+      if (!this.playersCanFight(attacker, target)) continue;
       if (distPoint(aimX, aimY, target.x, target.y) <= radius) {
         this.dealDamageToPlayer(attacker, target, id, damage, false, crit);
         if (!isBodyStunImmune(target.daoPath, target.currentQi, maxQiForRealm(target.realmFloor))) {
@@ -647,7 +821,7 @@ export class XianRoom extends Room {
     const damage = resolveActiveDamage("shadow", crit);
     const slowUntil = this.nowMs() + SLOW_MS;
 
-    if (best && bestId) {
+    if (best && bestId && this.playersCanFight(attacker, best)) {
       const angle = Math.atan2(best.y - attacker.y, best.x - attacker.x);
       attacker.x = clamp(
         best.x - Math.cos(angle) * 36,
@@ -700,6 +874,7 @@ export class XianRoom extends Room {
   ) {
     for (const [id, target] of this.state.players) {
       if (id === sessionId || target.currentQi <= 0) continue;
+      if (!this.playersCanFight(attacker, target)) continue;
       if (
         isBodyMeleeHit(attacker.x, attacker.y, target.x, target.y, range)
       ) {
@@ -748,6 +923,7 @@ export class XianRoom extends Room {
   ) {
     for (const [id, target] of this.state.players) {
       if (id === sessionId || target.currentQi <= 0) continue;
+      if (!this.playersCanFight(attacker, target)) continue;
       if (
         isInAttackArc(
           attacker.x,
@@ -852,8 +1028,28 @@ export class XianRoom extends Room {
     }
 
     if (target.currentQi <= 0) {
-      this.killPlayer(target, targetId, prevQi);
+      this.handlePlayerEliminated(target, targetId, prevQi, attacker);
     }
+  }
+
+  private handlePlayerEliminated(
+    player: Player,
+    sessionId: string,
+    qiBeforeDeath: number,
+    killer: Player | undefined,
+  ) {
+    if (player.inPocketDuel && killer) {
+      this.finishPocketDuel(killer, player, qiBeforeDeath);
+      return;
+    }
+    if (player.inPocketDuel) {
+      const opp = this.state.players.get(player.pocketOpponentId);
+      if (opp) {
+        this.finishPocketDuel(opp, player, qiBeforeDeath);
+      }
+      return;
+    }
+    this.killPlayer(player, sessionId, qiBeforeDeath);
   }
 
   private killPlayer(player: Player, sessionId: string, qiBeforeDeath: number) {
@@ -894,7 +1090,7 @@ export class XianRoom extends Room {
       nearestPlayer = undefined;
       nearestDist = Infinity;
       for (const player of this.state.players.values()) {
-        if (player.currentQi <= 0) continue;
+        if (player.currentQi <= 0 || player.inPocketDuel) continue;
         const dist = Math.hypot(player.x - demon.x, player.y - demon.y);
         if (dist < nearestDist) {
           nearestDist = dist;

@@ -5,6 +5,7 @@ import {
   DAO_PATH_IDS,
   DAO_PATH_UI_TH,
   isCombatKitActive,
+  isInDuelZone,
   REALM_NAMES_TH,
   VASSANA_CAP,
   type DaoPathChoice,
@@ -26,6 +27,15 @@ const leaderboardList = document.getElementById(
 )! as HTMLOListElement;
 const pathOverlay = document.getElementById("path-overlay")!;
 const pathChoices = document.getElementById("path-choices")!;
+const challengeBanner = document.getElementById("challenge-banner")!;
+const challengeText = document.getElementById("challenge-text")!;
+const challengeAccept = document.getElementById(
+  "challenge-accept",
+)! as HTMLButtonElement;
+const challengeDecline = document.getElementById(
+  "challenge-decline",
+)! as HTMLButtonElement;
+const toast = document.getElementById("toast")!;
 
 const PATH_LABELS: Record<DaoPathChoice, string> = {
   sword: "กระบี่",
@@ -61,6 +71,34 @@ function syncPathOverlay() {
   }
 }
 
+function showToast(message: string) {
+  toast.textContent = message;
+  toast.classList.remove("hidden");
+  window.setTimeout(() => toast.classList.add("hidden"), 3200);
+}
+
+function syncChallengeBanner() {
+  if (!room) return;
+  const me = room.state.players.get(room.sessionId);
+  if (me?.challengeFrom) {
+    const from = room.state.players.get(me.challengeFrom);
+    challengeText.textContent = `${from?.name ?? "นักบำเพ็ต"} ขอท้าดวล PocketDuel`;
+    challengeBanner.classList.remove("hidden");
+  } else {
+    challengeBanner.classList.add("hidden");
+  }
+}
+
+challengeAccept.addEventListener("click", () => {
+  room?.send("acceptChallenge", {});
+  challengeBanner.classList.add("hidden");
+});
+
+challengeDecline.addEventListener("click", () => {
+  room?.send("declineChallenge", {});
+  challengeBanner.classList.add("hidden");
+});
+
 function updateHud() {
   if (!room) return;
   const me = room.state.players.get(room.sessionId);
@@ -81,7 +119,12 @@ function updateHud() {
       me.daoPath,
       me.awaitingPathChoice,
     );
-    statsEl.innerHTML = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>สาย: ${pathLabel}${kit ? "" : " (ปิด)"}<br/>วาสนา: ${vassanaPct}%`;
+    const duelHint = me.inPocketDuel
+      ? "<br/><em>⚔ PocketDuel</em>"
+      : isInDuelZone(me.x, me.y)
+        ? "<br/><em>วงดวล FFA</em>"
+        : "";
+    statsEl.innerHTML = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>สาย: ${pathLabel}${kit ? "" : " (ปิด)"}<br/>วาสนา: ${vassanaPct}%${duelHint}`;
   }
   const rows = [...room.state.players.values()]
     .filter((p) => p?.name)
@@ -104,12 +147,46 @@ async function joinGame() {
     joinOverlay.classList.add("hidden");
     hud.classList.remove("hidden");
 
+    room.onMessage(
+      "challengeReceived",
+      (msg: { fromName: string }) => {
+        showToast(`${msg.fromName} ขอท้าดวล — กดยอมด้านบน`);
+        syncChallengeBanner();
+      },
+    );
+    room.onMessage(
+      "challengeRejected",
+      (msg: { reason: string }) => {
+        const text =
+          msg.reason === "in_duel_zone"
+            ? "ท้าดวลไม่ได้ในวงดวล"
+            : "ท้าดวลไม่ได้ตอนนี้";
+        showToast(text);
+      },
+    );
+    room.onMessage(
+      "pocketDuelStart",
+      (msg: { aName: string; bName: string }) => {
+        showToast(`PocketDuel: ${msg.aName} vs ${msg.bName}`);
+      },
+    );
+    room.onMessage(
+      "pocketDuelEnd",
+      (msg: { winnerName: string; loserName: string; transfer: number }) => {
+        showToast(
+          `${msg.winnerName} ชนะ — ได้ ${msg.transfer} พลังจาก ${msg.loserName}`,
+        );
+      },
+    );
+
     room.onStateChange(() => {
       updateHud();
       syncPathOverlay();
+      syncChallengeBanner();
     });
     updateHud();
     syncPathOverlay();
+    syncChallengeBanner();
 
     const game = new Phaser.Game({
       type: Phaser.AUTO,
@@ -123,16 +200,15 @@ async function joinGame() {
       },
     });
     game.scene.add("WorldScene", WorldScene, false);
-    const toast = document.getElementById("toast")!;
     game.scene.start("WorldScene", {
       room,
       onDeathMessage: (msg: { sessionId: string; name: string }) => {
         const mine = msg.sessionId === room!.sessionId;
-        toast.textContent = mine
-          ? "พลังปรานกระจาย — ฟื้นที่ขอบแผนที่"
-          : `${msg.name} ล้ม — ลมปราณกระจาย`;
-        toast.classList.remove("hidden");
-        window.setTimeout(() => toast.classList.add("hidden"), 2800);
+        showToast(
+          mine
+            ? "พลังปรานกระจาย — ฟื้นที่ขอบแผนที่"
+            : `${msg.name} ล้ม — ลมปราณกระจาย`,
+        );
       },
     });
   } catch (err) {

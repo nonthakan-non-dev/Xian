@@ -20,6 +20,12 @@ export const Player = schema(
     shieldUntil: t.number(),
     herbBuffUntil: t.number(),
     lastDamagedAt: t.number(),
+    inPocketDuel: t.boolean(),
+    pocketOpponentId: t.string(),
+    returnX: t.number(),
+    returnY: t.number(),
+    challengeTo: t.string(),
+    challengeFrom: t.string(),
   },
   "Player",
 );

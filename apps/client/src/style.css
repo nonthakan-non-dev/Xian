@@ -183,6 +183,47 @@ body {
   margin-bottom: 0.2rem;
 }
 
+#challenge-banner {
+  position: fixed;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 11;
+  pointer-events: auto;
+}
+
+#challenge-banner.hidden {
+  display: none;
+}
+
+.challenge-panel {
+  min-width: 280px;
+  text-align: center;
+}
+
+.challenge-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.challenge-actions button {
+  flex: 1;
+  padding: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid #4a6a9a;
+  background: #121c2a;
+  color: inherit;
+  cursor: pointer;
+}
+
+#challenge-accept {
+  background: linear-gradient(135deg, #c9a227, #8a6918);
+  border: none;
+  color: #1a1008;
+  font-weight: 600;
+}
+
 .hint {
   position: fixed;
   bottom: 8px;

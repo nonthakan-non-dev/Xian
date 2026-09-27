@@ -2,7 +2,9 @@ import Phaser from "phaser";
 import type { Room } from "colyseus.js";
 import {
   DEMON_ZONES,
+  DUEL_ZONES,
   isCombatKitActive,
+  isInDuelZone,
   MAP_HEIGHT,
   MAP_WIDTH,
   type Player,
@@ -32,6 +34,7 @@ export class WorldScene extends Phaser.Scene {
   private facing = { x: 1, y: 0 };
   private spaceKey?: Phaser.Input.Keyboard.Key;
   private shiftKey?: Phaser.Input.Keyboard.Key;
+  private challengeKey?: Phaser.Input.Keyboard.Key;
   private herbSprites = new Map<string, Phaser.GameObjects.Rectangle>();
   private onDeathMessage?: (payload: { sessionId: string; name: string }) => void;
 
@@ -72,6 +75,12 @@ export class WorldScene extends Phaser.Scene {
       zoneGfx.lineStyle(3, 0xcc4455, 0.35);
       zoneGfx.strokeCircle(zone.cx, zone.cy, zone.radius);
     }
+    for (const zone of DUEL_ZONES) {
+      zoneGfx.fillStyle(0x886622, 0.1);
+      zoneGfx.fillCircle(zone.cx, zone.cy, zone.radius);
+      zoneGfx.lineStyle(3, 0xddbb44, 0.45);
+      zoneGfx.strokeCircle(zone.cx, zone.cy, zone.radius);
+    }
 
     if (this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
@@ -81,6 +90,9 @@ export class WorldScene extends Phaser.Scene {
       );
       this.shiftKey = this.input.keyboard.addKey(
         Phaser.Input.Keyboard.KeyCodes.SHIFT,
+      );
+      this.challengeKey = this.input.keyboard.addKey(
+        Phaser.Input.Keyboard.KeyCodes.C,
       );
     }
 
@@ -157,6 +169,28 @@ export class WorldScene extends Phaser.Scene {
       ease: "Cubic.easeOut",
       onComplete: () => text.destroy(),
     });
+  }
+
+  private sendChallengeToNearest() {
+    if (!this.room) return;
+    const me = this.room.state.players.get(this.room.sessionId);
+    if (!me || me.inPocketDuel || isInDuelZone(me.x, me.y)) return;
+
+    let bestId: string | undefined;
+    let bestDist = 280;
+    for (const [id, p] of this.room.state.players) {
+      if (id === this.room.sessionId || p.currentQi <= 0 || p.inPocketDuel) {
+        continue;
+      }
+      const d = Phaser.Math.Distance.Between(me.x, me.y, p.x, p.y);
+      if (d < bestDist) {
+        bestDist = d;
+        bestId = id;
+      }
+    }
+    if (bestId) {
+      this.room.send("challenge", { targetId: bestId });
+    }
   }
 
   private canFight(): boolean {
@@ -327,6 +361,10 @@ export class WorldScene extends Phaser.Scene {
         const { aimX, aimY } = this.skillAimPoint(me);
         this.sendSkill(aimX, aimY);
       }
+    }
+
+    if (this.challengeKey && Phaser.Input.Keyboard.JustDown(this.challengeKey)) {
+      this.sendChallengeToNearest();
     }
 
     for (const [id, p] of this.room.state.players) {
