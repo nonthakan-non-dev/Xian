@@ -44,6 +44,7 @@ import {
   RESPAWN_QI,
   resolveActiveDamage,
   resolveBasicDamage,
+  resolveFacingUnitVector,
   rollOrbWithVassana,
   SHADOW_WARP_RANGE,
   SHIELD_DURATION_MS,
@@ -457,9 +458,14 @@ export class XianRoom extends Room {
     aimY: number,
     crit: boolean,
   ) {
-    const angle = Math.atan2(aimY - attacker.y, aimX - attacker.x);
-    const nx = Math.cos(angle);
-    const ny = Math.sin(angle);
+    const { x: nx, y: ny } = resolveFacingUnitVector(
+      attacker.inputX,
+      attacker.inputY,
+      attacker.x,
+      attacker.y,
+      aimX,
+      aimY,
+    );
     const startX = attacker.x;
     const startY = attacker.y;
     attacker.x = clamp(

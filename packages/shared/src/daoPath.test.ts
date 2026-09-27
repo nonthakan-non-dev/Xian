@@ -6,6 +6,7 @@ import {
   isCombatKitActive,
   overloadOnSkillUse,
   resolveBasicDamage,
+  resolveFacingUnitVector,
 } from "./daoPath.js";
 
 describe("isCombatKitActive", () => {
@@ -53,5 +54,13 @@ describe("resolveBasicDamage", () => {
     expect(resolveBasicDamage("lightning", false)).toBeGreaterThan(
       resolveBasicDamage("sword", false),
     );
+  });
+});
+
+describe("resolveFacingUnitVector", () => {
+  it("prefers movement input over cursor aim", () => {
+    const f = resolveFacingUnitVector(0, -1, 100, 100, 200, 200);
+    expect(f.x).toBeCloseTo(0);
+    expect(f.y).toBeCloseTo(-1);
   });
 });

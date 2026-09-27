@@ -195,3 +195,25 @@ export function shadowStealthSpeedBonus(
   if (daoPath !== "shadow" || msSinceDamage < SHADOW_STEALTH_MS) return 1;
   return 1.25;
 }
+
+/** Sword dash / facing: movement first, then cursor aim, then default east. */
+export function resolveFacingUnitVector(
+  inputX: number,
+  inputY: number,
+  fromX: number,
+  fromY: number,
+  aimX: number,
+  aimY: number,
+): { x: number; y: number } {
+  const inputLen = Math.hypot(inputX, inputY);
+  if (inputLen > 0.01) {
+    return { x: inputX / inputLen, y: inputY / inputLen };
+  }
+  const dx = aimX - fromX;
+  const dy = aimY - fromY;
+  const aimLen = Math.hypot(dx, dy);
+  if (aimLen > 8) {
+    return { x: dx / aimLen, y: dy / aimLen };
+  }
+  return { x: 1, y: 0 };
+}

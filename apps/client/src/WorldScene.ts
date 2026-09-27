@@ -27,6 +27,8 @@ export class WorldScene extends Phaser.Scene {
   private labels = new Map<string, Phaser.GameObjects.Text>();
   private demonSprites = new Map<string, Phaser.GameObjects.Arc>();
   private lastInput = { x: 0, y: 0 };
+  /** Last non-zero move / aim direction for sword dash. */
+  private facing = { x: 1, y: 0 };
   private spaceKey?: Phaser.Input.Keyboard.Key;
   private shiftKey?: Phaser.Input.Keyboard.Key;
   private herbSprites = new Map<string, Phaser.GameObjects.Rectangle>();
@@ -109,10 +111,34 @@ export class WorldScene extends Phaser.Scene {
     );
   }
 
+  private setFacingToward(worldX: number, worldY: number, fromX: number, fromY: number) {
+    const dx = worldX - fromX;
+    const dy = worldY - fromY;
+    const len = Math.hypot(dx, dy);
+    if (len > 8) {
+      this.facing = { x: dx / len, y: dy / len };
+    }
+  }
+
+  private skillAimPoint(me: Player): { aimX: number; aimY: number } {
+    if (me.daoPath === "sword") {
+      return {
+        aimX: me.x + this.facing.x * 200,
+        aimY: me.y + this.facing.y * 200,
+      };
+    }
+    const pointer = this.input.activePointer;
+    return {
+      aimX: pointer.worldX || me.x + 80,
+      aimY: pointer.worldY || me.y,
+    };
+  }
+
   private sendAttack(worldX: number, worldY: number) {
     if (!this.room || !this.canFight()) return;
     const me = this.room.state.players.get(this.room.sessionId);
     if (!me) return;
+    this.setFacingToward(worldX, worldY, me.x, me.y);
     this.room.send("attack", { aimX: worldX, aimY: worldY });
     const flash = this.add.circle(me.x, me.y, 28, 0xffeedd, 0.25);
     flash.setDepth(9);
@@ -129,6 +155,11 @@ export class WorldScene extends Phaser.Scene {
     if (!this.room || !this.canFight()) return;
     const me = this.room.state.players.get(this.room.sessionId);
     if (!me) return;
+    if (me.daoPath === "sword") {
+      const aim = this.skillAimPoint(me);
+      worldX = aim.aimX;
+      worldY = aim.aimY;
+    }
     this.room.send("skill", { aimX: worldX, aimY: worldY });
     const flash = this.add.circle(me.x, me.y, 36, 0xaaccff, 0.35);
     flash.setDepth(9);
@@ -205,6 +236,11 @@ export class WorldScene extends Phaser.Scene {
     if (this.cursors?.up.isDown || this.wasd?.W.isDown) iy -= 1;
     if (this.cursors?.down.isDown || this.wasd?.S.isDown) iy += 1;
 
+    if (ix !== 0 || iy !== 0) {
+      const len = Math.hypot(ix, iy);
+      this.facing = { x: ix / len, y: iy / len };
+    }
+
     if (ix !== this.lastInput.x || iy !== this.lastInput.y) {
       this.lastInput = { x: ix, y: iy };
       this.room.send("input", { x: ix, y: iy });
@@ -223,9 +259,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.shiftKey && Phaser.Input.Keyboard.JustDown(this.shiftKey)) {
       const me = this.room.state.players.get(this.room.sessionId);
       if (me) {
-        const pointer = this.input.activePointer;
-        const aimX = pointer.worldX || me.x + 80;
-        const aimY = pointer.worldY || me.y;
+        const { aimX, aimY } = this.skillAimPoint(me);
         this.sendSkill(aimX, aimY);
       }
     }
