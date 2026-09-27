@@ -11,6 +11,11 @@ export const ORB_PICKUP_RADIUS = 48;
 export const ORB_TARGET_COUNT = 120;
 export const ORB_SPAWN_INTERVAL_MS = 500;
 
+export const HERB_PICKUP_RADIUS = 52;
+export const HERB_QI_BONUS = 12;
+export const HERB_SPAWN_INTERVAL_MS = 8000;
+export const HERB_TARGET_COUNT = 6;
+
 export const MAX_QI_BY_REALM: Record<number, number> = {
   1: 100,
   2: 150,

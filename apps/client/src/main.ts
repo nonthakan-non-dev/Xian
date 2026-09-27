@@ -1,7 +1,15 @@
 import "./colyseus018JoinPatch.js";
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
-import { REALM_NAMES_TH, VASSANA_CAP, type XianState } from "@xian/shared";
+import {
+  DAO_PATH_IDS,
+  DAO_PATH_UI_TH,
+  isCombatKitActive,
+  REALM_NAMES_TH,
+  VASSANA_CAP,
+  type DaoPathChoice,
+  type XianState,
+} from "@xian/shared";
 import { joinXianRoom } from "./joinRoom.js";
 import { WorldScene } from "./WorldScene.js";
 
@@ -16,8 +24,42 @@ const statsEl = document.getElementById("stats")!;
 const leaderboardList = document.getElementById(
   "leaderboard-list",
 )! as HTMLOListElement;
+const pathOverlay = document.getElementById("path-overlay")!;
+const pathChoices = document.getElementById("path-choices")!;
+
+const PATH_LABELS: Record<DaoPathChoice, string> = {
+  sword: "กระบี่",
+  body: "กายา",
+  lightning: "อัคนี",
+  shadow: "เงา",
+};
 
 let room: Room<XianState> | null = null;
+
+function setupPathModal() {
+  pathChoices.innerHTML = DAO_PATH_IDS.map((id) => {
+    const ui = DAO_PATH_UI_TH[id];
+    return `<button type="button" data-path="${id}"><strong>${ui.title}</strong>${ui.blurb}</button>`;
+  }).join("");
+  pathChoices.querySelectorAll("button[data-path]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (!room) return;
+      const path = (btn as HTMLButtonElement).dataset.path;
+      if (!path) return;
+      room.send("choosePath", { path });
+    });
+  });
+}
+
+function syncPathOverlay() {
+  if (!room) return;
+  const me = room.state.players.get(room.sessionId);
+  if (me?.awaitingPathChoice) {
+    pathOverlay.classList.remove("hidden");
+  } else {
+    pathOverlay.classList.add("hidden");
+  }
+}
 
 function updateHud() {
   if (!room) return;
@@ -28,7 +70,18 @@ function updateHud() {
       100,
       Math.round((me.vassana / VASSANA_CAP) * 100),
     );
-    statsEl.innerHTML = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>วาสนา: ${vassanaPct}%`;
+    const pathLabel =
+      me.daoPath && PATH_LABELS[me.daoPath as DaoPathChoice]
+        ? PATH_LABELS[me.daoPath as DaoPathChoice]
+        : me.realmFloor >= 2 && !me.daoPath
+          ? "— เลือกสาย —"
+          : "—";
+    const kit = isCombatKitActive(
+      me.realmFloor,
+      me.daoPath,
+      me.awaitingPathChoice,
+    );
+    statsEl.innerHTML = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>สาย: ${pathLabel}${kit ? "" : " (ปิด)"}<br/>วาสนา: ${vassanaPct}%`;
   }
   const rows = [...room.state.players.values()]
     .filter((p) => p?.name)
@@ -51,8 +104,12 @@ async function joinGame() {
     joinOverlay.classList.add("hidden");
     hud.classList.remove("hidden");
 
-    room.onStateChange(() => updateHud());
+    room.onStateChange(() => {
+      updateHud();
+      syncPathOverlay();
+    });
     updateHud();
+    syncPathOverlay();
 
     const game = new Phaser.Game({
       type: Phaser.AUTO,
@@ -89,6 +146,7 @@ async function joinGame() {
   }
 }
 
+setupPathModal();
 joinBtn.addEventListener("click", () => void joinGame());
 nameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") void joinGame();

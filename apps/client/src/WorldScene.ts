@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import type { Room } from "colyseus.js";
 import {
   DEMON_ZONES,
+  isCombatKitActive,
   MAP_HEIGHT,
   MAP_WIDTH,
   type Player,
@@ -27,6 +28,8 @@ export class WorldScene extends Phaser.Scene {
   private demonSprites = new Map<string, Phaser.GameObjects.Arc>();
   private lastInput = { x: 0, y: 0 };
   private spaceKey?: Phaser.Input.Keyboard.Key;
+  private shiftKey?: Phaser.Input.Keyboard.Key;
+  private herbSprites = new Map<string, Phaser.GameObjects.Rectangle>();
   private onDeathMessage?: (payload: { sessionId: string; name: string }) => void;
 
   constructor() {
@@ -73,10 +76,19 @@ export class WorldScene extends Phaser.Scene {
       this.spaceKey = this.input.keyboard.addKey(
         Phaser.Input.Keyboard.KeyCodes.SPACE,
       );
+      this.shiftKey = this.input.keyboard.addKey(
+        Phaser.Input.Keyboard.KeyCodes.SHIFT,
+      );
     }
 
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      this.sendAttack(pointer.worldX, pointer.worldY);
+      if (pointer.rightButtonDown()) {
+        this.sendSkill(pointer.worldX, pointer.worldY);
+        return;
+      }
+      if (pointer.leftButtonDown()) {
+        this.sendAttack(pointer.worldX, pointer.worldY);
+      }
     });
 
     this.room.onMessage("playerDeath", (msg: { sessionId: string; name: string }) => {
@@ -87,10 +99,20 @@ export class WorldScene extends Phaser.Scene {
     this.room.onStateChange(() => this.syncWorldFromState());
   }
 
+  private canFight(): boolean {
+    const me = this.room?.state.players.get(this.room.sessionId);
+    if (!me || me.currentQi <= 0) return false;
+    return isCombatKitActive(
+      me.realmFloor,
+      me.daoPath,
+      me.awaitingPathChoice,
+    );
+  }
+
   private sendAttack(worldX: number, worldY: number) {
-    if (!this.room) return;
+    if (!this.room || !this.canFight()) return;
     const me = this.room.state.players.get(this.room.sessionId);
-    if (!me || me.currentQi <= 0) return;
+    if (!me) return;
     this.room.send("attack", { aimX: worldX, aimY: worldY });
     const flash = this.add.circle(me.x, me.y, 28, 0xffeedd, 0.25);
     flash.setDepth(9);
@@ -99,6 +121,22 @@ export class WorldScene extends Phaser.Scene {
       alpha: 0,
       scale: 1.6,
       duration: 180,
+      onComplete: () => flash.destroy(),
+    });
+  }
+
+  private sendSkill(worldX: number, worldY: number) {
+    if (!this.room || !this.canFight()) return;
+    const me = this.room.state.players.get(this.room.sessionId);
+    if (!me) return;
+    this.room.send("skill", { aimX: worldX, aimY: worldY });
+    const flash = this.add.circle(me.x, me.y, 36, 0xaaccff, 0.35);
+    flash.setDepth(9);
+    this.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scale: 1.8,
+      duration: 220,
       onComplete: () => flash.destroy(),
     });
   }
@@ -143,6 +181,18 @@ export class WorldScene extends Phaser.Scene {
         this.demonSprites.delete(id);
       }
     }
+
+    const herbIds = new Set<string>();
+    this.room.state.herbs.forEach((h, id) => {
+      herbIds.add(id);
+      this.ensureHerb(id, h);
+    });
+    for (const id of this.herbSprites.keys()) {
+      if (!herbIds.has(id)) {
+        this.herbSprites.get(id)?.destroy();
+        this.herbSprites.delete(id);
+      }
+    }
   }
 
   update() {
@@ -167,6 +217,16 @@ export class WorldScene extends Phaser.Scene {
         const aimX = pointer.worldX || me.x + 80;
         const aimY = pointer.worldY || me.y;
         this.sendAttack(aimX, aimY);
+      }
+    }
+
+    if (this.shiftKey && Phaser.Input.Keyboard.JustDown(this.shiftKey)) {
+      const me = this.room.state.players.get(this.room.sessionId);
+      if (me) {
+        const pointer = this.input.activePointer;
+        const aimX = pointer.worldX || me.x + 80;
+        const aimY = pointer.worldY || me.y;
+        this.sendSkill(aimX, aimY);
       }
     }
 
@@ -199,6 +259,14 @@ export class WorldScene extends Phaser.Scene {
       if (demon) {
         demon.x = Phaser.Math.Linear(demon.x, d.x, 0.4);
         demon.y = Phaser.Math.Linear(demon.y, d.y, 0.4);
+      }
+    }
+    for (const [id, h] of this.room.state.herbs) {
+      if (!this.herbSprites.has(id)) this.ensureHerb(id, h);
+      const herb = this.herbSprites.get(id);
+      if (herb) {
+        herb.x = h.x;
+        herb.y = h.y;
       }
     }
   }
@@ -261,5 +329,13 @@ export class WorldScene extends Phaser.Scene {
     arc.setDepth(8);
     arc.setStrokeStyle(2, 0xff8888, 0.7);
     this.demonSprites.set(id, arc);
+  }
+
+  private ensureHerb(id: string, h: { x: number; y: number }) {
+    if (this.herbSprites.has(id)) return;
+    const herb = this.add.rectangle(h.x, h.y, 14, 14, 0x44dd66, 0.95);
+    herb.setDepth(6);
+    herb.setStrokeStyle(2, 0xbbffcc, 0.9);
+    this.herbSprites.set(id, herb);
   }
 }

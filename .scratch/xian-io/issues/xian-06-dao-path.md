@@ -1,6 +1,6 @@
 # xian-06-dao-path
 
-**Status:** todo  
+**Status:** done  
 **Blockers:** xian-05b-demons-vassana
 
 ## Goal
@@ -17,10 +17,10 @@ PathChoice modal ขั้น 2; 4 DaoPath พร้อม Basic / Passive / Act
 
 ## Acceptance criteria
 
-- [ ] ขึ้นขั้น 2 → modal บังคับ; เลือกแล้วใช้ skill ได้
-- [ ] ทั้ง 4 สาย: basic + active ทำ damage Qi ได้
-- [ ] Passive ทำงานอย่างน้อย 1 อ per path (ทดด้วย Vitest ที่เป็นไปได้)
-- [ ] Vitest: `poisonStacks`, `overloadCrit`
+- [x] ขึ้นขั้น 2 → modal บังคับ; เลือกแล้วใช้ skill ได้
+- [x] ทั้ง 4 สาย: basic + active ทำ damage Qi ได้
+- [x] Passive ทำงานอย่างน้อย 1 อ per path (ทดด้วย Vitest ที่เป็นไปได้)
+- [x] Vitest: `poisonStacks`, `overloadCrit`
 
 ## Spec refs
 

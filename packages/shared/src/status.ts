@@ -17,6 +17,10 @@ export function tickStatuses(
     .filter((s) => s.remainingMs > 0);
 }
 
-export function poisonDamagePerTick(stacks: number): number {
-  return stacks * 0.4;
+export function poisonDamagePerTick(
+  stacks: number,
+  tickMultiplier = 1,
+): number {
+  if (stacks <= 0) return 0;
+  return stacks * 0.4 * tickMultiplier;
 }

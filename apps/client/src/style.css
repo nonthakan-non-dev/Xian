@@ -124,6 +124,65 @@ body {
   display: none;
 }
 
+#path-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 8, 12, 0.82);
+  z-index: 12;
+  pointer-events: auto;
+}
+
+#path-overlay.hidden {
+  display: none;
+}
+
+.path-panel {
+  max-width: 520px;
+  width: 92vw;
+}
+
+.path-panel h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.15rem;
+}
+
+.path-note {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.path-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.path-grid button {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #4a6a9a;
+  background: #121c2a;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.path-grid button:hover {
+  border-color: #7ab0ff;
+  background: #1a2840;
+}
+
+.path-grid button strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
 .hint {
   position: fixed;
   bottom: 8px;

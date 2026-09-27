@@ -1,1 +1,1 @@
-export { Player, Orb, Demon, XianState } from "@xian/shared";
+export { Player, Orb, Demon, Herb, XianState } from "@xian/shared";
