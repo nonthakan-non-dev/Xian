@@ -1,3 +1,5 @@
+import { effectiveCombatTier } from "./cultivation.js";
+
 /** DaoPath ids, kit rules, and passive helpers (server-authoritative). */
 
 export type DaoPathId = "" | "sword" | "body" | "lightning" | "shadow";
@@ -109,13 +111,20 @@ export function isBodyStunImmune(
   return daoPath === "body" && currentQi > maxQi * 0.5;
 }
 
-export function flyingSwordCount(realmFloor: number): number {
-  return Math.min(5, Math.max(0, realmFloor - 1));
+export function flyingSwordCount(
+  realmFloor: number,
+  qiLayer = 1,
+): number {
+  const tier = effectiveCombatTier(realmFloor, qiLayer);
+  return Math.min(5, Math.max(0, tier - 1));
 }
 
 /** Max passive DPS from FlyingSwords at a given RealmFloor (all blades hit each interval). */
-export function flyingSwordMaxPassiveDps(realmFloor: number): number {
-  const count = flyingSwordCount(realmFloor);
+export function flyingSwordMaxPassiveDps(
+  realmFloor: number,
+  qiLayer = 1,
+): number {
+  const count = flyingSwordCount(realmFloor, qiLayer);
   if (count <= 0) return 0;
   return (count * FLYING_SWORD_DAMAGE * 1000) / FLYING_SWORD_INTERVAL_MS;
 }

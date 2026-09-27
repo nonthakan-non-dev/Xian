@@ -20,7 +20,7 @@ import {
   FLYING_SWORD_INTERVAL_MS,
   FLYING_SWORD_RANGE,
   HERB_BUFF_MS,
-  HERB_PICKUP_RADIUS,
+  herbPickupRadiusForCultivation,
   HERB_QI_BONUS,
   HERB_SPAWN_INTERVAL_MS,
   HERB_TARGET_COUNT,
@@ -38,13 +38,13 @@ import {
   MAX_PLAYERS,
   moveSpeedForRealm,
   ORB_VALUE,
-  ORB_PICKUP_RADIUS,
+  orbPickupRadiusForCultivation,
   ORB_SPAWN_INTERVAL_MS,
   ORB_TARGET_COUNT,
   overloadOnSkillUse,
   poisonDamagePerTick,
   poisonDecayStateOnRefresh,
-  promoteRealmFloor,
+  applyQiGainWithCultivation,
   tickPoisonDecayState,
   type PoisonDecayState,
   qiToOrbValues,
@@ -61,7 +61,6 @@ import {
   STUN_MS,
   shadowStealthSpeedBonus,
   addVassanaOnDemonKill,
-  applyOrbPickup,
   damageDemon,
   isInAnyDemonZone,
   maxQiForRealm,
@@ -213,6 +212,7 @@ export class XianRoom extends Room {
     player.y = pos.y;
     player.currentQi = 20;
     player.realmFloor = 1;
+    player.qiLayer = 1;
     player.vassana = 0;
     player.daoPath = "";
     player.awaitingPathChoice = false;
@@ -487,7 +487,8 @@ export class XianRoom extends Room {
         const len = Math.hypot(player.inputX, player.inputY);
         if (len > 0.01) {
           const speed =
-            moveSpeedForRealm(player.realmFloor) * this.speedMultiplier(player);
+            moveSpeedForRealm(player.realmFloor, player.qiLayer) *
+              this.speedMultiplier(player);
           const nx = player.inputX / len;
           const ny = player.inputY / len;
           player.x = clamp(player.x + nx * speed * dt, 0, MAP_WIDTH);
@@ -534,7 +535,7 @@ export class XianRoom extends Room {
     ) {
       return;
     }
-    const count = flyingSwordCount(player.realmFloor);
+    const count = flyingSwordCount(player.realmFloor, player.qiLayer);
     if (count <= 0) return;
 
     const last = this.lastFlyingSwordMs.get(player.sessionId) ?? 0;
@@ -815,7 +816,13 @@ export class XianRoom extends Room {
       if (!this.playersCanFight(attacker, target)) continue;
       if (distPoint(aimX, aimY, target.x, target.y) <= radius) {
         this.dealDamageToPlayer(attacker, target, id, damage, false, crit);
-        if (!isBodyStunImmune(target.daoPath, target.currentQi, maxQiForRealm(target.realmFloor))) {
+        if (
+          !isBodyStunImmune(
+            target.daoPath,
+            target.currentQi,
+            maxQiForRealm(target.realmFloor, target.qiLayer),
+          )
+        ) {
           target.stunUntil = Math.max(target.stunUntil, stunUntil);
         }
       }
@@ -1307,16 +1314,23 @@ export class XianRoom extends Room {
     const toRemove: string[] = [];
     for (const [id, orb] of this.state.orbs) {
       const dist = Math.hypot(orb.x - player.x, orb.y - player.y);
-      if (dist <= ORB_PICKUP_RADIUS) {
+      const pickupR = orbPickupRadiusForCultivation(
+        player.realmFloor,
+        player.qiLayer,
+      );
+      if (dist <= pickupR) {
         const base = orb.value > 0 ? orb.value : ORB_VALUE;
         const gained = rollOrbWithVassana(base, player.vassana);
-        const maxQi = maxQiForRealm(player.realmFloor);
         const prevFloor = player.realmFloor;
-        player.currentQi = applyOrbPickup(player.currentQi, gained, maxQi);
-        player.realmFloor = promoteRealmFloor(
+        const updated = applyQiGainWithCultivation(
           player.currentQi,
           player.realmFloor,
+          player.qiLayer,
+          gained,
         );
+        player.currentQi = updated.currentQi;
+        player.realmFloor = updated.realmFloor;
+        player.qiLayer = updated.qiLayer;
         if (player.realmFloor > prevFloor) {
           this.afterRealmPromote(player);
         }
@@ -1332,18 +1346,21 @@ export class XianRoom extends Room {
     const toRemove: string[] = [];
     for (const [id, herb] of this.state.herbs) {
       const dist = Math.hypot(herb.x - player.x, herb.y - player.y);
-      if (dist <= HERB_PICKUP_RADIUS) {
-        const maxQi = maxQiForRealm(player.realmFloor);
+      const herbR = herbPickupRadiusForCultivation(
+        player.realmFloor,
+        player.qiLayer,
+      );
+      if (dist <= herbR) {
         const prevFloor = player.realmFloor;
-        player.currentQi = applyOrbPickup(
-          player.currentQi,
-          HERB_QI_BONUS,
-          maxQi,
-        );
-        player.realmFloor = promoteRealmFloor(
+        const updated = applyQiGainWithCultivation(
           player.currentQi,
           player.realmFloor,
+          player.qiLayer,
+          HERB_QI_BONUS,
         );
+        player.currentQi = updated.currentQi;
+        player.realmFloor = updated.realmFloor;
+        player.qiLayer = updated.qiLayer;
         if (player.realmFloor > prevFloor) {
           this.afterRealmPromote(player);
         }

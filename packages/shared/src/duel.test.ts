@@ -63,24 +63,30 @@ describe("resolvePocketDuel", () => {
     const r = resolvePocketDuel({
       loserQiBeforeZero: 100,
       loserRealmFloor: 3,
+      loserQiLayer: 1,
       winnerQi: 50,
       winnerRealmFloor: 3,
+      winnerQiLayer: 1,
     });
     expect(r.transferAmount).toBe(40);
     expect(r.winnerQi).toBe(
       Math.min(maxQiForRealm(3), 50 + 40),
     );
     expect(r.loserRealmFloor).toBe(2);
+    expect(r.loserQiLayer).toBe(1);
   });
 
   it("does not demote realm below one", () => {
     const r = resolvePocketDuel({
       loserQiBeforeZero: 30,
       loserRealmFloor: 1,
+      loserQiLayer: 3,
       winnerQi: 20,
       winnerRealmFloor: 2,
+      winnerQiLayer: 1,
     });
     expect(r.loserRealmFloor).toBe(1);
+    expect(r.loserQiLayer).toBe(2);
     expect(r.transferAmount).toBe(12);
   });
 });

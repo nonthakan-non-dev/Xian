@@ -7,7 +7,7 @@ import {
   daoPathAccentColor,
   combatKitBlockReason,
   isInDuelZone,
-  REALM_NAMES_TH,
+  realmDisplayName,
   VASSANA_CAP,
   type DaoPathChoice,
   type XianState,
@@ -114,7 +114,10 @@ function updateHud() {
   if (!room) return;
   const me = room.state.players.get(room.sessionId);
   if (me) {
-    const realmName = REALM_NAMES_TH[me.realmFloor as number] ?? "—";
+    const realmName = realmDisplayName(
+      me.realmFloor as number,
+      (me.qiLayer as number) ?? 1,
+    );
     const vassanaPct = Math.min(
       100,
       Math.round((me.vassana / VASSANA_CAP) * 100),
@@ -149,7 +152,10 @@ function updateHud() {
     .slice(0, 8);
   leaderboardList.innerHTML = rows
     .map((p, i) => {
-      const realm = REALM_NAMES_TH[p.realmFloor as number] ?? "—";
+      const realm = realmDisplayName(
+        p.realmFloor as number,
+        (p.qiLayer as number) ?? 1,
+      );
       const path =
         p.daoPath && PATH_LABELS[p.daoPath as DaoPathChoice]
           ? PATH_LABELS[p.daoPath as DaoPathChoice]

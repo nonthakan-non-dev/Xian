@@ -1,4 +1,5 @@
 import { MAP_HEIGHT, MAP_WIDTH, maxQiForRealm } from "./balance.js";
+import { demoteCultivation } from "./cultivation.js";
 import { applyOrbPickup } from "./qi.js";
 
 export const POCKET_QI_TRANSFER_RATE = 0.4;
@@ -72,20 +73,28 @@ export function isMutualChallenge(
 export function resolvePocketDuel(input: {
   loserQiBeforeZero: number;
   loserRealmFloor: number;
+  loserQiLayer: number;
   winnerQi: number;
   winnerRealmFloor: number;
+  winnerQiLayer: number;
 }): {
   winnerQi: number;
   loserRealmFloor: number;
+  loserQiLayer: number;
   transferAmount: number;
 } {
   const transferAmount = Math.floor(
     input.loserQiBeforeZero * POCKET_QI_TRANSFER_RATE,
   );
-  const cap = maxQiForRealm(input.winnerRealmFloor);
+  const cap = maxQiForRealm(input.winnerRealmFloor, input.winnerQiLayer);
   const winnerQi = applyOrbPickup(input.winnerQi, transferAmount, cap);
-  const loserRealmFloor = Math.max(1, input.loserRealmFloor - 1);
-  return { winnerQi, loserRealmFloor, transferAmount };
+  const demoted = demoteCultivation(input.loserRealmFloor, input.loserQiLayer);
+  return {
+    winnerQi,
+    loserRealmFloor: demoted.realmFloor,
+    loserQiLayer: demoted.qiLayer,
+    transferAmount,
+  };
 }
 
 export function canEngagePvP(a: {

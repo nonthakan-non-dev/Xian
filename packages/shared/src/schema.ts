@@ -8,6 +8,7 @@ export const Player = schema(
     y: t.number(),
     currentQi: t.number(),
     realmFloor: t.number(),
+    qiLayer: t.number(),
     inputX: t.number(),
     inputY: t.number(),
     vassana: t.number(),

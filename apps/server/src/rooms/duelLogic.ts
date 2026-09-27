@@ -41,11 +41,14 @@ export function applyPocketEnd(
   const result = resolvePocketDuel({
     loserQiBeforeZero,
     loserRealmFloor: loser.realmFloor,
+    loserQiLayer: loser.qiLayer,
     winnerQi: winner.currentQi,
     winnerRealmFloor: winner.realmFloor,
+    winnerQiLayer: winner.qiLayer,
   });
   winner.currentQi = result.winnerQi;
   loser.realmFloor = result.loserRealmFloor;
+  loser.qiLayer = result.loserQiLayer;
   loser.currentQi = respawnQi;
   winner.x = winner.returnX;
   winner.y = winner.returnY;

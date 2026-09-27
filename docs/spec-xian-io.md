@@ -63,35 +63,30 @@ flowchart TD
 
 ## 4. โมเดลพลังและขั้นฝึก
 
-### 4.1 CurrentQi และ RealmFloor
+### 4.1 CurrentQi, RealmFloor และ QiLayer
 
 | แนวคิด | กติกา |
 |--------|--------|
 | **CurrentQi** | ค่าเดียวใน UI เรียก「พลังปราณ」— ใช้เป็นชีวิตและคะแนน leaderboard |
 | **ความเสียหาย** | ลด CurrentQi (basic, skill, DoT, passive) |
 | **Heal** | เก็บ LingqiOrb, SpiritHerb, respawn fill ตาม rule |
-| **RealmFloor** | ขั้นฝึกสูงสุดที่เคยถึงในห้อง (1–7) |
-| **Promotion** | เมื่อ CurrentQi ≥ threshold ของขั้นถัดไป → RealmFloor ขึ้น (ไม่ลดจาก damage ทั่วไป) |
-| **Demotion** | เฉพาะแพ้ **PocketDuel** (RealmFloor −1 ถ้า > 1) |
+| **RealmFloor** | ขั้นฝึกสูงสุดที่เคยถึงในห้อง (1–25 ตาม `CULTIVATION_CATALOG`) |
+| **QiLayer** | ชั้นย่อย 1–15 เฉพาะเมื่อ RealmFloor = 1 (หนิngชี่ / 凝气) |
+| **Promotion** | Server เรียก `promoteCultivation` — บนขั้น 1 เลื่อน QiLayer ก่อน; ถึงชั้น 15 + threshold จึงขึ้นขั้น 2; ขั้น 2+ เลื่อน RealmFloor ตาม threshold จนถึง 25 |
+| **Demotion** | เฉพาะแพ้ **PocketDuel** — `demoteCultivation` (ขั้น >2 ลง 1; ขั้น 2 → 1 ชั้น 15; ขั้น 1 ลดชั้น) |
 
-### 4.2 ขั้นฝึก (UI ไทยล้วน)
+### 4.2 ขั้นฝึก (แคตตาล็อกเดียวใน `packages/shared`)
 
-| Tier | ชื่อใน UI |
-|------|-----------|
-| 1 | รวบรวมปราณ |
-| 2 | สร้างฐานปราณ |
-| 3 | จินตาน |
-| 4 | วิญญาณทารก |
-| 5 | ตัดวิญญาณ |
-| 6 | แปลงวิญญาณ |
-| 7 | ถามเต๋า |
+- ยี่สิบห้าขั้นเรียงตาม *ฝืนลิขิตฟ้า* (หนิngชี่ → 踏天) พร้อมชื่อไทย/จีน, `majorStep`, `kind` (cultivation / transition)
+- UI ขั้น 1: `realmDisplayName` → 「รวมลมปราณ · ชั้น N」
+- **DaoPath / PathChoice** ยัง legacy จน SkillDraft (xian-10); combat tier ใช้ `effectiveCombatTier` (cap 7)
 
-### 4.3 Stat ตาม RealmFloor (ค่าตัวเลขใน `packages/shared`)
+### 4.3 Stat ตามขั้นฝึก (ค่าตัวเลขใน `packages/shared`)
 
-- **MaxQi** ต่อ tier
-- **MoveSpeed** — tier สูงช้าลง, tier ต่ำเร็วขึ้น
-- **PickupRadius** — tier สูงเก็บของไกลขึ้น
-- **BodyRadius** (optional visual / hitbox)
+- **MaxQi** — ขั้น 1 ตาม QiLayer; ขั้น 2+ ตาม RealmFloor (`maxQiForRealm`)
+- **MoveSpeed** — ตาม effective stat tier (ชั้นย่อยบนขั้น 1, floor บนขั้น 2+)
+- **PickupRadius** — `orbPickupRadiusForCultivation` / herb variant
+- **BodyRadius / สี aura** — ตาม `majorStep` ในแคตตาล็อก
 
 ### 4.4 ความตาย (ทุกที่บนแผนที่)
 
