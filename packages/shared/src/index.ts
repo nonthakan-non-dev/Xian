@@ -17,3 +17,5 @@ export * from "./skillCombat.js";
 export * from "./combatTelegraph.js";
 export * from "./skillCooldown.js";
 export * from "./runSummary.js";
+export * from "./cultivatorNameWords.js";
+export * from "./cultivatorName.js";

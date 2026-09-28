@@ -103,3 +103,7 @@ _Avoid_: death, game over
 **RunSummary**:
 ข้อมูลสรุป CultivationRun ที่ server ส่งให้ผู้เล่นที่ RunEnd ก่อน despawn
 _Avoid_: death screen, scoreboard
+
+**CultivatorDisplayName**:
+ชื่อที่แสดงบน join overlay / HUD / leaderboard — ผู้เล่นพิมพ์เองหรือสุ่มจากคลังคำฝั่ง client; server เก็บสตริงเดียวกันใน `player.name` (สูงสุด 24 ตัวอักษร)
+_Avoid_: username, account name

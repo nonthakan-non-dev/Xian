@@ -42,6 +42,33 @@ body {
   min-width: 280px;
 }
 
+.name-row {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  align-items: center;
+}
+
+.name-row input,
+.name-row button.secondary {
+  box-sizing: border-box;
+  height: 2.75rem;
+  margin: 0;
+  padding: 0 0.75rem;
+  font-size: 1rem;
+  line-height: 1.25;
+  font-family: inherit;
+  border-radius: 8px;
+}
+
+.name-row input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #4a6a9a;
+  background: #0d1520;
+  color: inherit;
+}
+
 .panel input {
   width: 100%;
   padding: 0.75rem;
@@ -62,6 +89,20 @@ body {
   color: white;
   font-size: 1rem;
   cursor: pointer;
+}
+
+.name-row button.secondary {
+  width: auto;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: #152638;
+  border: 1px solid #4a6a9a;
+  color: #c8daf0;
+  cursor: pointer;
+}
+
+.name-row button.secondary:hover {
+  background: #1c3250;
 }
 
 #hud {

@@ -8,6 +8,7 @@ import {
   SKILL_DRAFT_PICK_TIMEOUT_MS,
   VASSANA_CAP,
   type Player,
+  rollCultivatorDisplayName,
   type RunSummaryPayload,
   type XianState,
 } from "@xian/shared";
@@ -28,6 +29,9 @@ const joinOverlay = document.getElementById("join-overlay")!;
 const hud = document.getElementById("hud")!;
 const nameInput = document.getElementById("name-input") as HTMLInputElement;
 const joinBtn = document.getElementById("join-btn") as HTMLButtonElement;
+const randomNameBtn = document.getElementById(
+  "random-name-btn",
+) as HTMLButtonElement;
 const statsEl = document.getElementById("stats")!;
 const leaderboardList = document.getElementById(
   "leaderboard-list",
@@ -75,6 +79,14 @@ sfxMute.checked = isSfxMuted();
 sfxMute.addEventListener("change", () => setSfxMuted(sfxMute.checked));
 
 let toastHideTimer = 0;
+
+function applyRandomDisplayName() {
+  nameInput.value = rollCultivatorDisplayName(Math.random);
+}
+
+function prefillDisplayNameIfEmpty() {
+  if (!nameInput.value.trim()) applyRandomDisplayName();
+}
 
 function showToast(message: string, size: "normal" | "mini" = "normal") {
   window.clearTimeout(toastHideTimer);
@@ -445,6 +457,7 @@ async function leaveToLobby() {
   joinOverlay.classList.remove("hidden");
   joinBtn.disabled = false;
   lastStatsHtml = "";
+  prefillDisplayNameIfEmpty();
 }
 
 async function joinGame() {
@@ -578,6 +591,7 @@ async function joinGame() {
 }
 
 joinBtn.addEventListener("click", () => void joinGame());
+randomNameBtn.addEventListener("click", () => applyRandomDisplayName());
 nameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") void joinGame();
 });
@@ -594,3 +608,5 @@ runSummaryRestartBtn.addEventListener("click", () => {
     await joinGame();
   })();
 });
+
+prefillDisplayNameIfEmpty();
