@@ -6,7 +6,6 @@ import {
   DEMON_ZONES,
   DUEL_ZONES,
   getSkillById,
-  isCombatKitActive,
   isInAnyDemonZone,
   isInDuelZone,
   MAP_HEIGHT,
@@ -20,6 +19,7 @@ import {
   type XianState,
 } from "@xian/shared";
 import { drawDamageTelegraph } from "./drawTelegraph.js";
+import { isPlayerBlockedBySkillDraft } from "./draftUi.js";
 import { playSfx } from "./sfx.js";
 import {
   applyPlayerColors,
@@ -224,7 +224,7 @@ export class WorldScene extends Phaser.Scene {
   private canFight(): boolean {
     const me = this.room?.state.players.get(this.room.sessionId);
     if (!me || me.currentQi <= 0) return false;
-    return isCombatKitActive(me.awaitingSkillDraft);
+    return !isPlayerBlockedBySkillDraft(me.awaitingSkillDraft);
   }
 
   /** Sprite on map (interpolated) — use for VFX; server still uses synced x/y. */
@@ -442,7 +442,9 @@ export class WorldScene extends Phaser.Scene {
 
     const now = this.time.now;
     const meInput = this.room.state.players.get(this.room.sessionId);
-    const draftLocked = meInput?.awaitingSkillDraft ?? false;
+    const draftLocked = isPlayerBlockedBySkillDraft(
+      meInput?.awaitingSkillDraft ?? false,
+    );
 
     let combatThisFrame = false;
 

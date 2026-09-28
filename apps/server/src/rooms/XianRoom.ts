@@ -208,7 +208,9 @@ export class XianRoom extends Room {
             skillId: String(data.skillId ?? ""),
           });
         } else {
-          client.send("skillDraftRejected", {});
+          client.send("skillDraftRejected", {
+            reason: "invalid_pick",
+          });
         }
       },
     );

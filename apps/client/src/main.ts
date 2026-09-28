@@ -13,6 +13,11 @@ import {
 import { joinXianRoom } from "./joinRoom.js";
 import { isSfxMuted, setSfxMuted } from "./sfx.js";
 import { WorldScene } from "./WorldScene.js";
+import {
+  clearDraftPickPending,
+  isDraftPickPending,
+  markDraftPickSent,
+} from "./draftUi.js";
 
 const SERVER_URL =
   import.meta.env.VITE_SERVER_URL ?? "http://localhost:2567";
@@ -104,7 +109,8 @@ function renderSkillDraftButtons(offerIds: string[]) {
   )) {
     btn.onclick = () => {
       const id = btn.dataset.skillId;
-      if (!id || !room) return;
+      if (!id || !room || isDraftPickPending()) return;
+      markDraftPickSent();
       hideSkillDraftModal();
       clearInstantDraftCache();
       room.send("pickSkillDraft", { skillId: id });
@@ -114,6 +120,10 @@ function renderSkillDraftButtons(offerIds: string[]) {
 
 function syncSkillDraftModal() {
   if (!room) return;
+  if (isDraftPickPending()) {
+    hideSkillDraftModal();
+    return;
+  }
   const me = room.state.players.get(room.sessionId);
   const awaiting = me?.awaitingSkillDraft ?? false;
   const syncedOffers = me ? parseSkillIds(me.draftOfferIds) : [];
@@ -143,7 +153,8 @@ function wireSkillDraftListeners(activeRoom: Room<XianState>) {
 
   const bindPlayer = (player: Player, sessionId: string) => {
     if (sessionId !== activeRoom.sessionId) return;
-    $(player).listen("awaitingSkillDraft", () => {
+    $(player).listen("awaitingSkillDraft", (value: boolean) => {
+      if (!value) clearDraftPickPending();
       syncSkillDraftModal();
       updateHud();
     });
@@ -254,11 +265,13 @@ async function joinGame() {
       },
     );
     room.onMessage("skillDraftComplete", () => {
+      clearDraftPickPending();
       hideSkillDraftModal();
       clearInstantDraftCache();
       updateHud();
     });
     room.onMessage("skillDraftRejected", () => {
+      clearDraftPickPending();
       showToast("เลือกวิชาไม่สำเร็จ — ลองอีกครั้ง");
       syncSkillDraftModal();
     });

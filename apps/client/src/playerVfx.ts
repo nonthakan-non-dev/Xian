@@ -3,7 +3,6 @@ import {
   flyingSwordCount,
   hasFlyingBladePassive,
   hasStealthPassive,
-  isCombatKitActive,
   parseSkillIds,
   playerBodyRadius,
   realmFillColor,
@@ -12,6 +11,7 @@ import {
   skillLoadoutAccentColor,
   type Player,
 } from "@xian/shared";
+import { isPlayerBlockedBySkillDraft } from "./draftUi.js";
 
 export function applyPlayerColors(
   body: Phaser.GameObjects.Arc,
@@ -39,7 +39,7 @@ export function drawSwordOrbit(
   const owned = parseSkillIds(p.ownedSkillIds);
   if (
     !hasFlyingBladePassive(owned) ||
-    !isCombatKitActive(p.awaitingSkillDraft)
+    isPlayerBlockedBySkillDraft(p.awaitingSkillDraft)
   ) {
     return;
   }
