@@ -1,12 +1,13 @@
 import "./colyseus018JoinPatch.js";
 import Phaser from "phaser";
-import { Client, Room } from "colyseus.js";
+import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
   getSkillById,
   isInDuelZone,
   parseSkillIds,
   realmDisplayName,
   VASSANA_CAP,
+  type Player,
   type XianState,
 } from "@xian/shared";
 import { joinXianRoom } from "./joinRoom.js";
@@ -71,15 +72,25 @@ challengeDecline.addEventListener("click", () => {
   challengeBanner.classList.add("hidden");
 });
 
+function hideSkillDraftModal() {
+  skillDraftOverlay.classList.add("hidden");
+  skillDraftOptions.innerHTML = "";
+}
+
 function syncSkillDraftModal() {
   if (!room) return;
   const me = room.state.players.get(room.sessionId);
   if (!me?.awaitingSkillDraft) {
-    skillDraftOverlay.classList.add("hidden");
-    skillDraftOptions.innerHTML = "";
+    hideSkillDraftModal();
     return;
   }
   const offers = parseSkillIds(me.draftOfferIds);
+  if (offers.length === 0) {
+    skillDraftSubtitle.textContent = "กำลังรอตัวเลือกวิชาจากเซิร์ver…";
+    skillDraftOptions.innerHTML = "";
+    skillDraftOverlay.classList.remove("hidden");
+    return;
+  }
   skillDraftSubtitle.textContent = `ขั้น ${realmDisplayName(me.realmFloor, me.qiLayer)} — เลือกหนึ่งในสาม`;
   skillDraftOptions.innerHTML = offers
     .map((id) => {
@@ -100,9 +111,37 @@ function syncSkillDraftModal() {
   )) {
     btn.onclick = () => {
       const id = btn.dataset.skillId;
-      if (id) room?.send("pickSkillDraft", { skillId: id });
+      if (!id || !room) return;
+      for (const b of skillDraftOptions.querySelectorAll<HTMLButtonElement>(
+        ".skill-draft-btn",
+      )) {
+        b.disabled = true;
+      }
+      room.send("pickSkillDraft", { skillId: id });
     };
   }
+}
+
+function wireSkillDraftListeners(activeRoom: Room<XianState>) {
+  const $ = getStateCallbacks(activeRoom);
+  if (!$) return;
+
+  const bindPlayer = (player: Player, sessionId: string) => {
+    if (sessionId !== activeRoom.sessionId) return;
+    $(player).listen("awaitingSkillDraft", () => {
+      syncSkillDraftModal();
+      updateHud();
+    });
+    $(player).listen("draftOfferIds", () => syncSkillDraftModal());
+    $(player).listen("ownedSkillIds", () => updateHud());
+  };
+
+  $(activeRoom.state).players.onAdd((player, sessionId) => {
+    bindPlayer(player, sessionId);
+  });
+  activeRoom.state.players.forEach((player, sessionId) => {
+    bindPlayer(player, sessionId);
+  });
 }
 
 function updateHud() {
@@ -184,6 +223,16 @@ async function joinGame() {
         );
       },
     );
+    room.onMessage("skillDraftComplete", () => {
+      hideSkillDraftModal();
+      updateHud();
+    });
+    room.onMessage("skillDraftRejected", () => {
+      showToast("เลือกวิชาไม่สำเร็จ — ลองอีกครั้ง");
+      syncSkillDraftModal();
+    });
+
+    wireSkillDraftListeners(room);
 
     room.onStateChange(() => {
       updateHud();

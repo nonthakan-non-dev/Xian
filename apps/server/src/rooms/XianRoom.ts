@@ -199,7 +199,17 @@ export class XianRoom extends Room {
     this.onMessage(
       "pickSkillDraft",
       (client, data: { skillId?: string }) => {
-        this.handlePickSkillDraft(client.sessionId, String(data.skillId ?? ""));
+        const ok = this.handlePickSkillDraft(
+          client.sessionId,
+          String(data.skillId ?? ""),
+        );
+        if (ok) {
+          client.send("skillDraftComplete", {
+            skillId: String(data.skillId ?? ""),
+          });
+        } else {
+          client.send("skillDraftRejected", {});
+        }
       },
     );
 
@@ -449,6 +459,7 @@ export class XianRoom extends Room {
   }
 
   private afterRealmPromote(player: Player) {
+    if (player.awaitingSkillDraft) return;
     const pool = getSkillPoolForRealm(player.realmFloor).map((s) => s.id);
     const offers = rollSkillDraft(pool, this.ownedSkills(player), Math.random);
     if (offers.length === 0) {
@@ -460,13 +471,13 @@ export class XianRoom extends Room {
     player.draftOfferIds = formatSkillIds(offers);
   }
 
-  private handlePickSkillDraft(sessionId: string, skillId: string) {
+  private handlePickSkillDraft(sessionId: string, skillId: string): boolean {
     const player = this.state.players.get(sessionId);
-    if (!player || !player.awaitingSkillDraft) return;
+    if (!player || !player.awaitingSkillDraft) return false;
     const offers = parseSkillIds(player.draftOfferIds);
-    if (!validateSkillPick(skillId, offers)) return;
+    if (!validateSkillPick(skillId, offers)) return false;
     const def = getSkillById(skillId);
-    if (!def) return;
+    if (!def) return false;
     const result = applySkillPick({
       ownedSkillIds: this.ownedSkills(player),
       draftOfferIds: offers,
@@ -478,6 +489,7 @@ export class XianRoom extends Room {
     player.draftOfferIds = formatSkillIds(result.draftOfferIds);
     player.awaitingSkillDraft = result.awaitingSkillDraft;
     player.lastActiveSkillId = result.lastActiveSkillId;
+    return true;
   }
 
   private tick() {
@@ -1423,6 +1435,7 @@ export class XianRoom extends Room {
   }
 
   private tryPickupOrbs(player: Player) {
+    if (player.awaitingSkillDraft) return;
     const toRemove: string[] = [];
     for (const [id, orb] of this.state.orbs) {
       const dist = Math.hypot(orb.x - player.x, orb.y - player.y);
@@ -1445,6 +1458,8 @@ export class XianRoom extends Room {
         player.qiLayer = updated.qiLayer;
         if (player.realmFloor > prevFloor) {
           this.afterRealmPromote(player);
+          toRemove.push(id);
+          break;
         }
         toRemove.push(id);
       }
@@ -1455,6 +1470,7 @@ export class XianRoom extends Room {
   }
 
   private tryPickupHerbs(player: Player) {
+    if (player.awaitingSkillDraft) return;
     const toRemove: string[] = [];
     for (const [id, herb] of this.state.herbs) {
       const dist = Math.hypot(herb.x - player.x, herb.y - player.y);
@@ -1475,6 +1491,9 @@ export class XianRoom extends Room {
         player.qiLayer = updated.qiLayer;
         if (player.realmFloor > prevFloor) {
           this.afterRealmPromote(player);
+          player.herbBuffUntil = this.nowMs() + HERB_BUFF_MS;
+          toRemove.push(id);
+          break;
         }
         player.herbBuffUntil = this.nowMs() + HERB_BUFF_MS;
         toRemove.push(id);
