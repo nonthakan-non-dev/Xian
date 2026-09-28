@@ -81,7 +81,6 @@ import {
   maxQiForRealm,
   tickVassana,
   TICK_RATE_MS,
-  isInDuelZone,
 } from "@xian/shared";
 import { Demon, Herb, Orb, Player, XianState } from "../schema.js";
 

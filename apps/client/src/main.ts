@@ -3,7 +3,6 @@ import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
   getSkillById,
-  isInDuelZone,
   parseSkillIds,
   realmDisplayName,
   SKILL_DRAFT_PICK_TIMEOUT_MS,
@@ -299,14 +298,11 @@ function updateHud() {
       100,
       Math.round((me.vassana / VASSANA_CAP) * 100),
     );
-    const duelHint = isInDuelZone(me.x, me.y)
-      ? "<br/><em>วงดวล FFA</em>"
-      : "";
     const skillLine =
       owned.length > 0
         ? `<br/>วิชา: ${owned.length} · Shift: ${getSkillById(me.lastActiveSkillId)?.nameTh ?? "—"}`
         : "<br/><em>หนิงชี่ · โจมตีพื้นฐานอ่อน</em>";
-    const statsHtml = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>วาสนา: ${vassanaPct}%${skillLine}${duelHint}`;
+    const statsHtml = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>วาสนา: ${vassanaPct}%${skillLine}`;
     if (statsHtml !== lastStatsHtml) {
       lastStatsHtml = statsHtml;
       statsEl.innerHTML = statsHtml;

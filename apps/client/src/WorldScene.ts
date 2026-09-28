@@ -5,7 +5,6 @@ import {
   DAMAGE_TELEGRAPH_HOLD_BASIC_MS,
   DAMAGE_TELEGRAPH_HOLD_SKILL_MS,
   DEMON_ZONES,
-  DUEL_ZONES,
   getSkillById,
   isInAnyDemonZone,
   MAP_HEIGHT,
@@ -106,13 +105,6 @@ export class WorldScene extends Phaser.Scene {
       zoneGfx.lineStyle(3, 0xcc4455, 0.35);
       zoneGfx.strokeCircle(zone.cx, zone.cy, zone.radius);
     }
-    for (const zone of DUEL_ZONES) {
-      zoneGfx.fillStyle(0x886622, 0.1);
-      zoneGfx.fillCircle(zone.cx, zone.cy, zone.radius);
-      zoneGfx.lineStyle(3, 0xddbb44, 0.45);
-      zoneGfx.strokeCircle(zone.cx, zone.cy, zone.radius);
-    }
-
     this.zoneHighlightGfx = this.add.graphics().setDepth(-4);
     this.telegraphGfx = this.add.graphics().setDepth(14);
 
