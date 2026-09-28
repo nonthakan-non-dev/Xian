@@ -38,9 +38,9 @@ export type TouchControlsBridge = {
 
 let moveVector = { x: 0, y: 0 };
 let attackHoldActive = false;
-let attackAimVector = { x: 0, y: 0 };
-/** Last non-zero drag aim while holding attack (kept after release for skill aim). */
-let lastAttackAimVector = { x: 0, y: 0 };
+let touchAimVector = { x: 0, y: 0 };
+/** Last non-zero drag aim from attack/skill pads (kept after release). */
+let lastTouchAimVector = { x: 0, y: 0 };
 let bound = false;
 
 export function getMoveVector(): { x: number; y: number } {
@@ -52,18 +52,21 @@ export function getAttackHoldActive(): boolean {
 }
 
 /** Current drag aim, or last drag direction if finger is in dead zone / released. */
-export function getAttackAimVector(): { x: number; y: number } {
-  if (attackAimVector.x !== 0 || attackAimVector.y !== 0) {
-    return attackAimVector;
+export function getTouchAimVector(): { x: number; y: number } {
+  if (touchAimVector.x !== 0 || touchAimVector.y !== 0) {
+    return touchAimVector;
   }
-  return lastAttackAimVector;
+  return lastTouchAimVector;
 }
+
+/** @deprecated use getTouchAimVector */
+export const getAttackAimVector = getTouchAimVector;
 
 export function unbindTouchControls(): void {
   moveVector = { x: 0, y: 0 };
   attackHoldActive = false;
-  attackAimVector = { x: 0, y: 0 };
-  lastAttackAimVector = { x: 0, y: 0 };
+  touchAimVector = { x: 0, y: 0 };
+  lastTouchAimVector = { x: 0, y: 0 };
   bound = false;
 }
 
@@ -92,18 +95,27 @@ export function bindTouchControls(
   const attackKnob = attackBtn?.querySelector(
     ".touch-pad-knob",
   ) as HTMLElement | null;
+  const skillKnob = skillBtn?.querySelector(
+    ".touch-pad-knob",
+  ) as HTMLElement | null;
 
-  if (!stickZone || !stickKnob || !attackBtn || !skillBtn || !attackKnob) return;
+  if (
+    !stickZone ||
+    !stickKnob ||
+    !attackBtn ||
+    !skillBtn ||
+    !attackKnob ||
+    !skillKnob
+  ) {
+    return;
+  }
 
-  const maxRadius = () => {
-    const rect = stickZone.getBoundingClientRect();
+  const padDragRadius = (pad: HTMLElement) => {
+    const rect = pad.getBoundingClientRect();
     return Math.min(rect.width, rect.height) * 0.38;
   };
 
-  const attackDragRadius = () => {
-    const rect = attackBtn.getBoundingClientRect();
-    return Math.min(rect.width, rect.height) * 0.38;
-  };
+  const maxRadius = () => padDragRadius(stickZone);
 
   const setKnobOffset = (
     knob: HTMLElement,
@@ -172,15 +184,21 @@ export function bindTouchControls(
   let attackOriginX = 0;
   let attackOriginY = 0;
 
-  const updateAttackAimFromEvent = (e: PointerEvent) => {
-    const dx = e.clientX - attackOriginX;
-    const dy = e.clientY - attackOriginY;
-    const r = attackDragRadius();
-    attackAimVector = pointerDeltaToAimVector(dx, dy, r);
-    if (attackAimVector.x !== 0 || attackAimVector.y !== 0) {
-      lastAttackAimVector = { ...attackAimVector };
+  const applyPadAim = (
+    originX: number,
+    originY: number,
+    e: PointerEvent,
+    pad: HTMLElement,
+    knob: HTMLElement,
+  ) => {
+    const dx = e.clientX - originX;
+    const dy = e.clientY - originY;
+    const r = padDragRadius(pad);
+    touchAimVector = pointerDeltaToAimVector(dx, dy, r);
+    if (touchAimVector.x !== 0 || touchAimVector.y !== 0) {
+      lastTouchAimVector = { ...touchAimVector };
     }
-    setKnobOffset(attackKnob, dx, dy, r);
+    setKnobOffset(knob, dx, dy, r);
   };
 
   const endAttackHold = (e: PointerEvent) => {
@@ -192,7 +210,7 @@ export function bindTouchControls(
     }
     attackPointerId = null;
     attackHoldActive = false;
-    attackAimVector = { x: 0, y: 0 };
+    touchAimVector = { x: 0, y: 0 };
     resetKnob(attackKnob);
     attackBtn.classList.remove("touch-pad-attack-active");
   };
@@ -205,7 +223,7 @@ export function bindTouchControls(
       attackOriginX = e.clientX;
       attackOriginY = e.clientY;
       attackHoldActive = true;
-      attackAimVector = { x: 0, y: 0 };
+      touchAimVector = { x: 0, y: 0 };
       attackBtn.setPointerCapture(e.pointerId);
       attackBtn.classList.add("touch-pad-attack-active");
       e.preventDefault();
@@ -215,17 +233,52 @@ export function bindTouchControls(
 
   attackBtn.addEventListener("pointermove", (e) => {
     if (e.pointerId !== attackPointerId) return;
-    updateAttackAimFromEvent(e);
+    applyPadAim(attackOriginX, attackOriginY, e, attackBtn, attackKnob);
     e.preventDefault();
   });
 
   attackBtn.addEventListener("pointerup", endAttackHold);
   attackBtn.addEventListener("pointercancel", endAttackHold);
 
-  const onAction = (fn: () => void) => (e: Event) => {
-    e.preventDefault();
-    fn();
+  let skillPointerId: number | null = null;
+  let skillOriginX = 0;
+  let skillOriginY = 0;
+
+  const endSkillGesture = (e: PointerEvent) => {
+    if (e.pointerId !== skillPointerId) return;
+    try {
+      skillBtn.releasePointerCapture(e.pointerId);
+    } catch {
+      /* already released */
+    }
+    skillPointerId = null;
+    touchAimVector = { x: 0, y: 0 };
+    resetKnob(skillKnob);
+    skillBtn.classList.remove("touch-pad-skill-active");
+    bridge.skill();
   };
 
-  skillBtn.addEventListener("click", onAction(bridge.skill));
+  skillBtn.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (skillPointerId !== null) return;
+      skillPointerId = e.pointerId;
+      skillOriginX = e.clientX;
+      skillOriginY = e.clientY;
+      touchAimVector = { x: 0, y: 0 };
+      skillBtn.setPointerCapture(e.pointerId);
+      skillBtn.classList.add("touch-pad-skill-active");
+      e.preventDefault();
+    },
+    { passive: false },
+  );
+
+  skillBtn.addEventListener("pointermove", (e) => {
+    if (e.pointerId !== skillPointerId) return;
+    applyPadAim(skillOriginX, skillOriginY, e, skillBtn, skillKnob);
+    e.preventDefault();
+  });
+
+  skillBtn.addEventListener("pointerup", endSkillGesture);
+  skillBtn.addEventListener("pointercancel", endSkillGesture);
 }

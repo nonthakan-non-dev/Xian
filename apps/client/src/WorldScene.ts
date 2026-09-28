@@ -31,7 +31,7 @@ import {
 } from "./combatFeedback.js";
 import { playSfx } from "./sfx.js";
 import {
-  getAttackAimVector,
+  getTouchAimVector,
   getAttackHoldActive,
   getMoveVector,
   isTouchUiActive,
@@ -329,7 +329,7 @@ export class WorldScene extends Phaser.Scene {
 
   private touchCombatAimPoint(sessionId: string): { aimX: number; aimY: number } {
     const origin = this.visualPos(sessionId);
-    const aim = getAttackAimVector();
+    const aim = getTouchAimVector();
     if (aim.x !== 0 || aim.y !== 0) {
       return {
         aimX: origin.x + aim.x * 200,

@@ -606,7 +606,8 @@ body {
   z-index: 1;
 }
 
-.touch-pad-attack-active {
+.touch-pad-attack-active,
+.touch-pad-skill-active {
   border-color: rgba(168, 210, 255, 0.75);
   box-shadow: 0 0 0 2px rgba(122, 176, 255, 0.35);
 }
@@ -625,9 +626,6 @@ body {
   pointer-events: auto;
 }
 
-.touch-pad-skill {
-  touch-action: manipulation;
-}
 
 @media (max-width: 640px) {
   #hud {
