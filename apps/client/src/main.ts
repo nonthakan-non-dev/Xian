@@ -56,6 +56,8 @@ let frozenDraftSubtitle = "";
 /** หลัง celebrate — เปิด modal เลือกวิชาได้ */
 let skillDraftPickPhaseOpen = false;
 let skillDraftHideTimer = 0;
+/** เปิด animation แล้ว — อย่ารีเซ็ต is-visible ทุก onStateChange */
+let skillDraftModalOpen = false;
 
 const sfxMute = document.getElementById("sfx-mute") as HTMLInputElement;
 sfxMute.checked = isSfxMuted();
@@ -143,6 +145,7 @@ function hideSkillDraftModal() {
   stopDraftCountdown();
   window.clearTimeout(skillDraftHideTimer);
   frozenDraftSubtitle = "";
+  skillDraftModalOpen = false;
   skillDraftOverlay.classList.remove("is-visible");
   skillDraftHideTimer = window.setTimeout(() => {
     skillDraftOverlay.classList.add("hidden");
@@ -153,11 +156,15 @@ function hideSkillDraftModal() {
 }
 
 function revealSkillDraftModal() {
+  if (skillDraftModalOpen) return;
   window.clearTimeout(skillDraftHideTimer);
   skillDraftOverlay.classList.remove("hidden");
   skillDraftOverlay.classList.remove("is-visible");
   requestAnimationFrame(() => {
-    requestAnimationFrame(() => skillDraftOverlay.classList.add("is-visible"));
+    requestAnimationFrame(() => {
+      skillDraftOverlay.classList.add("is-visible");
+      skillDraftModalOpen = true;
+    });
   });
 }
 
