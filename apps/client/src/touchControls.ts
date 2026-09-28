@@ -79,16 +79,21 @@ export function bindTouchControls(
   if (bound) return;
   bound = true;
 
-  const stickZone = root.querySelector(".touch-joystick") as HTMLElement | null;
-  const stickKnob = root.querySelector(".touch-joystick-knob") as HTMLElement | null;
+  const stickZone = root.querySelector(".touch-pad-move") as HTMLElement | null;
+  const stickKnob = stickZone?.querySelector(
+    ".touch-pad-knob",
+  ) as HTMLElement | null;
   const attackBtn = root.querySelector(
     "[data-touch-action='attack']",
   ) as HTMLButtonElement | null;
   const skillBtn = root.querySelector(
     "[data-touch-action='skill']",
   ) as HTMLButtonElement | null;
+  const attackKnob = attackBtn?.querySelector(
+    ".touch-pad-knob",
+  ) as HTMLElement | null;
 
-  if (!stickZone || !stickKnob || !attackBtn || !skillBtn) return;
+  if (!stickZone || !stickKnob || !attackBtn || !skillBtn || !attackKnob) return;
 
   const maxRadius = () => {
     const rect = stickZone.getBoundingClientRect();
@@ -97,7 +102,24 @@ export function bindTouchControls(
 
   const attackDragRadius = () => {
     const rect = attackBtn.getBoundingClientRect();
-    return Math.min(rect.width, rect.height) * 0.45;
+    return Math.min(rect.width, rect.height) * 0.38;
+  };
+
+  const setKnobOffset = (
+    knob: HTMLElement,
+    dx: number,
+    dy: number,
+    maxR: number,
+  ) => {
+    const visualR = Math.min(Math.hypot(dx, dy), maxR);
+    const angle = Math.atan2(dy, dx);
+    const vx = Math.cos(angle) * visualR;
+    const vy = Math.sin(angle) * visualR;
+    knob.style.transform = `translate(calc(-50% + ${vx}px), calc(-50% + ${vy}px))`;
+  };
+
+  const resetKnob = (knob: HTMLElement) => {
+    knob.style.transform = "translate(-50%, -50%)";
   };
 
   let pointerId: number | null = null;
@@ -107,7 +129,7 @@ export function bindTouchControls(
   const resetStick = () => {
     pointerId = null;
     moveVector = { x: 0, y: 0 };
-    stickKnob.style.transform = "translate(-50%, -50%)";
+    resetKnob(stickKnob);
   };
 
   stickZone.addEventListener(
@@ -129,11 +151,7 @@ export function bindTouchControls(
     const dy = e.clientY - originY;
     const r = maxRadius();
     moveVector = joystickDeltaToMoveVector(dx, dy, r);
-    const visualR = Math.min(Math.hypot(dx, dy), r);
-    const angle = Math.atan2(dy, dx);
-    const vx = Math.cos(angle) * visualR;
-    const vy = Math.sin(angle) * visualR;
-    stickKnob.style.transform = `translate(calc(-50% + ${vx}px), calc(-50% + ${vy}px))`;
+    setKnobOffset(stickKnob, dx, dy, r);
     e.preventDefault();
   });
 
@@ -162,6 +180,7 @@ export function bindTouchControls(
     if (attackAimVector.x !== 0 || attackAimVector.y !== 0) {
       lastAttackAimVector = { ...attackAimVector };
     }
+    setKnobOffset(attackKnob, dx, dy, r);
   };
 
   const endAttackHold = (e: PointerEvent) => {
@@ -174,7 +193,8 @@ export function bindTouchControls(
     attackPointerId = null;
     attackHoldActive = false;
     attackAimVector = { x: 0, y: 0 };
-    attackBtn.classList.remove("touch-btn-attack-active");
+    resetKnob(attackKnob);
+    attackBtn.classList.remove("touch-pad-attack-active");
   };
 
   attackBtn.addEventListener(
@@ -187,7 +207,7 @@ export function bindTouchControls(
       attackHoldActive = true;
       attackAimVector = { x: 0, y: 0 };
       attackBtn.setPointerCapture(e.pointerId);
-      attackBtn.classList.add("touch-btn-attack-active");
+      attackBtn.classList.add("touch-pad-attack-active");
       e.preventDefault();
     },
     { passive: false },

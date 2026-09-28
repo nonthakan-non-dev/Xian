@@ -555,20 +555,31 @@ body {
   display: none;
 }
 
-.touch-joystick {
-  position: absolute;
-  left: max(12px, env(safe-area-inset-left, 0px));
-  bottom: max(72px, calc(env(safe-area-inset-bottom, 0px) + 56px));
+.touch-pad {
+  position: relative;
+  flex-shrink: 0;
   width: 120px;
   height: 120px;
+  padding: 0;
+  margin: 0;
   border-radius: 50%;
   background: rgba(8, 16, 24, 0.45);
   border: 1px solid rgba(122, 176, 255, 0.35);
-  pointer-events: auto;
   touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  appearance: none;
+  font: inherit;
+  color: inherit;
 }
 
-.touch-joystick-knob {
+.touch-pad-move {
+  position: absolute;
+  left: max(12px, env(safe-area-inset-left, 0px));
+  bottom: max(72px, calc(env(safe-area-inset-bottom, 0px) + 56px));
+  pointer-events: auto;
+}
+
+.touch-pad-knob {
   position: absolute;
   left: 50%;
   top: 50%;
@@ -582,43 +593,40 @@ body {
   pointer-events: none;
 }
 
+.touch-pad-label {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(232, 244, 255, 0.9);
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+  z-index: 1;
+}
+
+.touch-pad-attack-active {
+  border-color: rgba(168, 210, 255, 0.75);
+  box-shadow: 0 0 0 2px rgba(122, 176, 255, 0.35);
+}
+
 .touch-actions {
   position: absolute;
   right: max(12px, env(safe-area-inset-right, 0px));
   bottom: max(72px, calc(env(safe-area-inset-bottom, 0px) + 56px));
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-direction: row;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.touch-actions .touch-pad {
   pointer-events: auto;
 }
 
-.touch-btn {
-  min-width: 72px;
-  padding: 0.65rem 1rem;
-  border-radius: 999px;
-  border: 1px solid rgba(122, 176, 255, 0.45);
-  background: rgba(12, 22, 36, 0.82);
-  color: #e8f4ff;
-  font-size: 0.95rem;
-  font-family: inherit;
+.touch-pad-skill {
   touch-action: manipulation;
-}
-
-.touch-btn-attack {
-  background: linear-gradient(135deg, rgba(200, 100, 80, 0.9), rgba(140, 50, 40, 0.95));
-  border-color: rgba(255, 180, 140, 0.5);
-  font-weight: 600;
-  touch-action: none;
-}
-
-.touch-btn-attack-active {
-  box-shadow: 0 0 0 2px rgba(255, 200, 160, 0.65);
-}
-
-.touch-btn-skill {
-  background: linear-gradient(135deg, rgba(74, 144, 217, 0.85), rgba(42, 96, 153, 0.95));
-  border: none;
-  font-weight: 600;
 }
 
 @media (max-width: 640px) {

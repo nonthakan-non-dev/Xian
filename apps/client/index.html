@@ -84,15 +84,27 @@
     </div>
     <div id="toast" class="hidden" role="status"></div>
     <div id="touch-controls" class="touch-controls hidden" aria-hidden="true">
-      <div class="touch-joystick" aria-label="เดิน">
-        <div class="touch-joystick-knob"></div>
+      <div class="touch-pad touch-pad-move" aria-label="เดิน">
+        <div class="touch-pad-knob"></div>
       </div>
       <div class="touch-actions">
-        <button type="button" class="touch-btn touch-btn-skill" data-touch-action="skill">
-          วิชา
+        <button
+          type="button"
+          class="touch-pad touch-pad-skill"
+          data-touch-action="skill"
+          aria-label="วิชา"
+        >
+          <div class="touch-pad-knob"></div>
+          <span class="touch-pad-label">วิชา</span>
         </button>
-        <button type="button" class="touch-btn touch-btn-attack" data-touch-action="attack">
-          โจมตี
+        <button
+          type="button"
+          class="touch-pad touch-pad-attack"
+          data-touch-action="attack"
+          aria-label="โจมตี"
+        >
+          <div class="touch-pad-knob"></div>
+          <span class="touch-pad-label">โจมตี</span>
         </button>
       </div>
     </div>
