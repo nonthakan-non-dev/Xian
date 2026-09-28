@@ -8,11 +8,20 @@ body {
   background: #0a0f14;
   color: #e8f0ff;
   overflow: hidden;
+  touch-action: none;
+}
+
+#join-overlay .panel input,
+#join-overlay .panel button,
+#join-overlay .name-row input,
+#join-overlay .name-row button {
+  touch-action: manipulation;
 }
 
 #game {
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
 }
 
 #game canvas {
@@ -78,6 +87,60 @@ body {
   background: #0d1520;
   color: inherit;
   font-size: 1rem;
+}
+
+.server-url-label {
+  display: block;
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.85rem;
+  opacity: 0.85;
+  text-align: left;
+}
+
+#server-url-input {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.join-loading {
+  padding: 1.25rem 0 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.join-loading.hidden {
+  display: none;
+}
+
+#join-overlay.is-joining .name-row,
+#join-overlay.is-joining .server-url-label,
+#join-overlay.is-joining #server-url-input,
+#join-overlay.is-joining #join-form {
+  display: none;
+}
+
+.join-spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid rgba(122, 176, 255, 0.25);
+  border-top-color: #7ab0ff;
+  animation: join-spin 0.85s linear infinite;
+}
+
+@keyframes join-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#join-loading-text {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #c8daf0;
 }
 
 .panel button {
@@ -474,4 +537,224 @@ body {
 .skill-draft-btn span {
   font-size: 0.85rem;
   opacity: 0.85;
+}
+
+.touch-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  padding:
+    env(safe-area-inset-top, 0)
+    env(safe-area-inset-right, 0)
+    env(safe-area-inset-bottom, 0)
+    env(safe-area-inset-left, 0);
+}
+
+.touch-controls.hidden {
+  display: none;
+}
+
+.touch-pad {
+  position: relative;
+  flex-shrink: 0;
+  width: 120px;
+  height: 120px;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  background: rgba(8, 16, 24, 0.45);
+  border: 1px solid rgba(122, 176, 255, 0.35);
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  appearance: none;
+  font: inherit;
+  color: inherit;
+}
+
+.touch-pad-move {
+  position: absolute;
+  left: max(12px, env(safe-area-inset-left, 0px));
+  bottom: max(72px, calc(env(safe-area-inset-bottom, 0px) + 56px));
+  pointer-events: auto;
+}
+
+.touch-pad-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  border-radius: 50%;
+  background: rgba(136, 204, 255, 0.85);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.touch-pad-cooldown {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 2;
+  --cd-ratio: 0;
+  background: conic-gradient(
+    from -90deg,
+    rgba(0, 0, 0, 0.58) 0deg,
+    rgba(0, 0, 0, 0.58) calc(var(--cd-ratio) * 360deg),
+    transparent calc(var(--cd-ratio) * 360deg)
+  );
+}
+
+.touch-pad-cooldown-text {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #ffe8cc;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+  opacity: 0;
+}
+
+.touch-pad.touch-pad-cooling .touch-pad-cooldown {
+  opacity: 1;
+}
+
+.touch-pad.touch-pad-cooling .touch-pad-cooldown-text {
+  opacity: 1;
+}
+
+.touch-pad.touch-pad-cooling .touch-pad-knob {
+  opacity: 0.45;
+}
+
+.touch-pad-label {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(232, 244, 255, 0.9);
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+  z-index: 1;
+}
+
+.touch-pad-attack-active,
+.touch-pad-skill-active {
+  border-color: rgba(168, 210, 255, 0.75);
+  box-shadow: 0 0 0 2px rgba(122, 176, 255, 0.35);
+}
+
+.touch-actions {
+  position: absolute;
+  right: max(12px, env(safe-area-inset-right, 0px));
+  bottom: max(72px, calc(env(safe-area-inset-bottom, 0px) + 56px));
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.touch-actions .touch-pad {
+  pointer-events: auto;
+}
+
+
+@media (max-width: 640px) {
+  #hud {
+    flex-wrap: wrap;
+    padding: 8px 10px;
+  }
+
+  #leaderboard {
+    display: none;
+  }
+
+  #stats {
+    font-size: 0.82rem;
+    max-width: 100%;
+  }
+
+  .sfx-toggle {
+    bottom: max(140px, calc(env(safe-area-inset-bottom, 0px) + 120px));
+  }
+
+  .skill-cooldown {
+    bottom: max(148px, calc(env(safe-area-inset-bottom, 0px) + 128px));
+    width: min(200px, 50vw);
+  }
+
+  .skill-cooldown-on-touch-hidden {
+    display: none !important;
+  }
+
+  .hint-mobile {
+    bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    font-size: 0.68rem;
+  }
+}
+
+@media (pointer: fine) and (hover: hover) {
+  .hint-mobile {
+    display: none !important;
+  }
+}
+
+.rotate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 8, 12, 0.94);
+  padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
+    env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+}
+
+.rotate-overlay.hidden {
+  display: none;
+}
+
+.rotate-panel {
+  text-align: center;
+  padding: 1.5rem 2rem;
+  max-width: 320px;
+}
+
+.rotate-icon {
+  margin: 0 0 0.75rem;
+  font-size: 3rem;
+  line-height: 1;
+  color: #7ab0ff;
+  animation: rotate-hint-wobble 1.6s ease-in-out infinite;
+}
+
+@keyframes rotate-hint-wobble {
+  0%,
+  100% {
+    transform: rotate(-90deg);
+  }
+  50% {
+    transform: rotate(0deg);
+  }
+}
+
+.rotate-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.rotate-hint {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.8;
 }

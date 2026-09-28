@@ -1,13 +1,7 @@
 import "./colyseus018JoinPatch.js";
 import { Client, Room } from "colyseus.js";
 import { XianState } from "@xian/shared";
-
-function matchmakeBase(serverUrl: string): string {
-  if (import.meta.env.DEV && !import.meta.env.VITE_SERVER_URL) {
-    return window.location.origin;
-  }
-  return serverUrl.replace(/\/$/, "");
-}
+import { fetchWithTimeout, matchmakeBase } from "./serverUrl.js";
 
 /** Matchmake via fetch (proxy in dev) then join with schema decoder. */
 export async function joinXianRoom(
@@ -18,17 +12,22 @@ export async function joinXianRoom(
   const base = matchmakeBase(serverUrl);
   let res: Response;
   try {
-    res = await fetch(`${base}/matchmake/joinOrCreate/xian`, {
+    res = await fetchWithTimeout(`${base}/matchmake/joinOrCreate/xian`, {
       method: "POST",
+      mode: "cors",
+      credentials: "omit",
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ name }),
     });
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("หมดเวลา")) {
+      throw e;
+    }
     throw new Error(
-      "เชื่อม HTTP ไม่ได้ — ตรวจว่า server รันอยู่ (pnpm dev ต้องเห็น Colyseus listening)",
+      `matchmake ไม่ถึง ${base} — ถ้าเป็นมือถือ/LAN ให้เปิด client ที่ http://<IP-PC>:5173 และใส่เซิร์ver http://<IP-PC>:2567 (จะ relay ผ่าน Vite ในโหมด dev)`,
     );
   }
 
@@ -70,5 +69,15 @@ export async function joinXianRoom(
     ) => Promise<Room<XianState>>;
   };
 
-  return (client as ClientWithSeat).consumeSeatReservation(seat, XianState);
+  try {
+    return await (client as ClientWithSeat).consumeSeatReservation(
+      seat,
+      XianState,
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `WebSocket เข้าห้องไม่สำเร็จ (${msg}) — ตรวจว่า URL เซิร์ver ตรง IP ของเครื่องที่รัน Colyseus`,
+    );
+  }
 }

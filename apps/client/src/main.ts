@@ -2,6 +2,8 @@ import "./colyseus018JoinPatch.js";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
+  ACTIVE_SKILL_COOLDOWN_MS,
+  BASIC_ATTACK_COOLDOWN_MS,
   getSkillById,
   parseSkillIds,
   realmDisplayName,
@@ -19,15 +21,37 @@ import {
   isDraftPickPending,
   markDraftPickSent,
 } from "./draftUi.js";
-import { clientSkillCooldownForPlayer } from "./clientSkillCooldown.js";
-
-const SERVER_URL =
-  import.meta.env.VITE_SERVER_URL ?? "http://localhost:2567";
+import {
+  clientBasicAttackCooldownRemainingMs,
+  clientSkillCooldownForPlayer,
+} from "./clientSkillCooldown.js";
+import {
+  colyseusClientUrl,
+  getDefaultServerUrl,
+  resolveServerUrl,
+  saveServerUrl,
+  storedServerUrlForPage,
+} from "./serverUrl.js";
+import {
+  bindTouchControls,
+  isTouchUiActive,
+  unbindTouchControls,
+  updateTouchPadCooldowns,
+} from "./touchControls.js";
+import {
+  initMobilePlayRestrictions,
+  requestLandscapeLock,
+} from "./mobilePlay.js";
 
 const joinOverlay = document.getElementById("join-overlay")!;
 const hud = document.getElementById("hud")!;
 const nameInput = document.getElementById("name-input") as HTMLInputElement;
+const serverUrlInput = document.getElementById(
+  "server-url-input",
+) as HTMLInputElement;
 const joinBtn = document.getElementById("join-btn") as HTMLButtonElement;
+const joinLoadingEl = document.getElementById("join-loading")!;
+const joinLoadingText = document.getElementById("join-loading-text")!;
 const randomNameBtn = document.getElementById(
   "random-name-btn",
 ) as HTMLButtonElement;
@@ -36,6 +60,10 @@ const leaderboardList = document.getElementById(
   "leaderboard-list",
 )! as HTMLOListElement;
 const toast = document.getElementById("toast")!;
+const touchControlsEl = document.getElementById("touch-controls")!;
+const rotateOverlay = document.getElementById("rotate-overlay")!;
+const hintDesktop = document.querySelector(".hint-desktop") as HTMLElement | null;
+const hintMobile = document.querySelector(".hint-mobile") as HTMLElement | null;
 const skillDraftOverlay = document.getElementById("skill-draft-overlay")!;
 const skillDraftOptions = document.getElementById("skill-draft-options")!;
 const skillDraftSubtitle = document.getElementById("skill-draft-subtitle")!;
@@ -356,6 +384,33 @@ function startSkillCooldownHudLoop() {
 function updateSkillCooldownHud() {
   if (!room) return;
   const me = room.state.players.get(room.sessionId);
+  const attackRemainingMs = clientBasicAttackCooldownRemainingMs();
+
+  if (isTouchUiActive()) {
+    skillCooldownEl.classList.add("hidden", "skill-cooldown-on-touch-hidden");
+    let skillRemainingMs = 0;
+    let skillTotalMs = ACTIVE_SKILL_COOLDOWN_MS;
+    if (me?.lastActiveSkillId) {
+      const skillMeta = getSkillById(me.lastActiveSkillId);
+      if (
+        skillMeta &&
+        (skillMeta.kind === "active" || skillMeta.kind === "hybrid")
+      ) {
+        const cd = clientSkillCooldownForPlayer(me.lastActiveSkillId);
+        skillRemainingMs = cd.remainingMs;
+        skillTotalMs = cd.totalMs;
+      }
+    }
+    updateTouchPadCooldowns({
+      attackRemainingMs,
+      attackTotalMs: BASIC_ATTACK_COOLDOWN_MS,
+      skillRemainingMs,
+      skillTotalMs,
+    });
+    return;
+  }
+
+  skillCooldownEl.classList.remove("skill-cooldown-on-touch-hidden");
   if (!me?.lastActiveSkillId) {
     skillCooldownEl.classList.add("hidden");
     return;
@@ -424,6 +479,14 @@ function updateHud() {
     .join("");
 }
 
+function syncMobileUiHints() {
+  const touch = isTouchUiActive();
+  touchControlsEl.classList.toggle("hidden", !touch);
+  touchControlsEl.setAttribute("aria-hidden", touch ? "false" : "true");
+  hintDesktop?.classList.toggle("hidden", touch);
+  hintMobile?.classList.toggle("hidden", !touch);
+}
+
 async function leaveToLobby() {
   hideRunSummaryModal();
   hideSkillDraftModal();
@@ -439,29 +502,82 @@ async function leaveToLobby() {
       /* already left */
     }
   }
-  if (game) {
-    game.destroy(true);
-    game = null;
+  if (game?.scene.isActive("WorldScene")) {
+    game.scene.stop("WorldScene");
   }
+  unbindTouchControls();
+  touchControlsEl.classList.add("hidden");
   hud.classList.add("hidden");
   joinOverlay.classList.remove("hidden");
-  joinBtn.disabled = false;
+  setJoinLoading(false);
   lastStatsHtml = "";
   prefillDisplayNameIfEmpty();
 }
 
+function prefillServerUrlIfEmpty() {
+  if (serverUrlInput.value.trim()) return;
+  serverUrlInput.value = storedServerUrlForPage() ?? getDefaultServerUrl();
+}
+
+const JOIN_LOADING_MESSAGE = "กำลังโหลดโลก";
+
+function ensureGameEngine(): Phaser.Game {
+  if (game) return game;
+  game = new Phaser.Game({
+    type: Phaser.AUTO,
+    parent: "game",
+    width: window.innerWidth,
+    height: window.innerHeight,
+    backgroundColor: "#0d1a12",
+    scale: {
+      mode: Phaser.Scale.RESIZE,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+    },
+  });
+  game.scene.add("WorldScene", WorldScene, false);
+  const gameRoot = document.getElementById("game");
+  if (gameRoot && !gameRoot.dataset.contextMenuBound) {
+    gameRoot.dataset.contextMenuBound = "1";
+    gameRoot.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
+  return game;
+}
+
+function setJoinLoading(active: boolean) {
+  if (active) {
+    joinOverlay.classList.add("is-joining");
+    joinLoadingEl.classList.remove("hidden");
+    joinLoadingText.textContent = JOIN_LOADING_MESSAGE;
+    nameInput.disabled = true;
+    serverUrlInput.disabled = true;
+    randomNameBtn.disabled = true;
+    joinBtn.disabled = true;
+    return;
+  }
+  joinOverlay.classList.remove("is-joining");
+  joinLoadingEl.classList.add("hidden");
+  nameInput.disabled = false;
+  serverUrlInput.disabled = false;
+  randomNameBtn.disabled = false;
+  joinBtn.disabled = false;
+}
+
 async function joinGame() {
   const name = nameInput.value.trim() || "นักบำเพ็ต";
-  joinBtn.disabled = true;
+  const serverUrl = resolveServerUrl(serverUrlInput.value);
+  saveServerUrl(serverUrl);
+  serverUrlInput.value = serverUrl;
   hideRunSummaryModal();
   try {
     if (room || game) {
       await leaveToLobby();
     }
-    const client = new Client(SERVER_URL);
-    room = await joinXianRoom(client, SERVER_URL, name);
-    joinOverlay.classList.add("hidden");
-    hud.classList.remove("hidden");
+    setJoinLoading(true);
+    void requestLandscapeLock();
+    const client = new Client(colyseusClientUrl(serverUrl));
+    const engineReady = Promise.resolve().then(() => ensureGameEngine());
+    room = await joinXianRoom(client, serverUrl, name);
+    await engineReady;
 
     room.onMessage(
       "skillDraftCelebrate",
@@ -547,35 +663,32 @@ async function joinGame() {
     startSkillCooldownHudLoop();
     syncSkillDraftModal();
 
-    game = new Phaser.Game({
-      type: Phaser.AUTO,
-      parent: "game",
-      width: window.innerWidth,
-      height: window.innerHeight,
-      backgroundColor: "#0d1a12",
-      scale: {
-        mode: Phaser.Scale.RESIZE,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
-      },
-    });
-    game.scene.add("WorldScene", WorldScene, false);
-    const gameRoot = document.getElementById("game");
-    gameRoot?.addEventListener("contextmenu", (e) => e.preventDefault());
-
-    game.scene.start("WorldScene", {
+    ensureGameEngine().scene.start("WorldScene", {
       room,
       onDeathMessage: (msg: { sessionId: string; name: string }) => {
         if (msg.sessionId === room!.sessionId) return;
         showToast(`${msg.name} ล้ม — ลมปราณกระจาย`);
       },
     });
+
+    bindTouchControls(touchControlsEl, {
+      skill: () => {
+        const scene = game?.scene.getScene("WorldScene") as WorldScene | undefined;
+        scene?.skillFromUi();
+      },
+    });
+
+    joinOverlay.classList.add("hidden");
+    hud.classList.remove("hidden");
+    syncMobileUiHints();
+    setJoinLoading(false);
   } catch (err) {
     console.error(err);
-    joinBtn.disabled = false;
+    setJoinLoading(false);
     const hint =
       err instanceof Error ? err.message : String(err);
     alert(
-      `เชื่อมต่อเซิร์ver ไม่ได้\n\nWS/API: ${SERVER_URL}\n${hint}\n\n1) รัน pnpm dev:clean จาก root\n2) ต้องเห็น "[xian] Colyseus listening" ไม่มี EADDRINUSE\n3) Hard refresh หน้าเบราว์เซอร์`,
+      `เชื่อมต่อเซิร์ver ไม่ได้\n\nเซิร์ver: ${serverUrl}\nWebSocket: ${colyseusClientUrl(serverUrl)}\n${hint}\n\n1) pnpm dev:clean — Colyseus listening ที่ :2567\n2) เปิดเกมที่ http://<IP>:5173 ใส่เซิร์ver http://<IP>:2567\n3) มือถือต้องเข้า :2567 ได้ (ปิด/อนุญาต firewall ชั่วคราวเพื่อทด)\n4) Android emulator ใช้ http://10.0.2.2:2567\n5) Hard refresh ถ้า PWA cache URL เก่า`,
     );
   }
 }
@@ -600,3 +713,6 @@ runSummaryRestartBtn.addEventListener("click", () => {
 });
 
 prefillDisplayNameIfEmpty();
+prefillServerUrlIfEmpty();
+syncMobileUiHints();
+initMobilePlayRestrictions(rotateOverlay);

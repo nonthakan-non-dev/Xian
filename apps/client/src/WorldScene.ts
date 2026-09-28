@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import type { Room } from "colyseus.js";
 import {
   ACTIVE_SKILL_COOLDOWN_MS,
+  BASIC_ATTACK_COOLDOWN_MS,
   DAMAGE_TELEGRAPH_HOLD_BASIC_MS,
   DAMAGE_TELEGRAPH_HOLD_SKILL_MS,
   DEMON_ZONES,
@@ -22,6 +23,7 @@ import { drawDamageTelegraph } from "./drawTelegraph.js";
 import { isPlayerBlockedBySkillDraft } from "./draftUi.js";
 import {
   clientSkillCooldownRemainingMs,
+  recordClientBasicAttack,
   recordClientSkillUse,
 } from "./clientSkillCooldown.js";
 import {
@@ -29,6 +31,12 @@ import {
   setSkillCooldownBlockedHandler,
 } from "./combatFeedback.js";
 import { playSfx } from "./sfx.js";
+import {
+  getTouchAimVector,
+  getAttackHoldActive,
+  getMoveVector,
+  isTouchUiActive,
+} from "./touchControls.js";
 import {
   applyPlayerColors,
   drawSwordOrbit,
@@ -66,6 +74,7 @@ export class WorldScene extends Phaser.Scene {
   private onDeathMessage?: (payload: { sessionId: string; name: string }) => void;
   private telegraphGfx?: Phaser.GameObjects.Graphics;
   private telegraphClearAt = 0;
+  private lastTouchAttackClientMs = 0;
 
   constructor() {
     super({ key: "WorldScene" });
@@ -121,6 +130,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (isTouchUiActive()) return;
       const { x, y } = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       if (pointer.rightButtonDown()) {
         this.sendSkill(x, y);
@@ -318,8 +328,26 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  private touchCombatAimPoint(sessionId: string): { aimX: number; aimY: number } {
+    const origin = this.visualPos(sessionId);
+    const aim = getTouchAimVector();
+    if (aim.x !== 0 || aim.y !== 0) {
+      return {
+        aimX: origin.x + aim.x * 200,
+        aimY: origin.y + aim.y * 200,
+      };
+    }
+    return {
+      aimX: origin.x + this.facing.x * 200,
+      aimY: origin.y + this.facing.y * 200,
+    };
+  }
+
   private skillAimPoint(sessionId: string): { aimX: number; aimY: number } {
     const origin = this.visualPos(sessionId);
+    if (isTouchUiActive()) {
+      return this.touchCombatAimPoint(sessionId);
+    }
     const pw = this.pointerWorld();
     const dist = Phaser.Math.Distance.Between(origin.x, origin.y, pw.x, pw.y);
     if (dist > 12) {
@@ -331,12 +359,22 @@ export class WorldScene extends Phaser.Scene {
     };
   }
 
+  skillFromUi() {
+    if (!this.room) return;
+    const sid = this.room.sessionId;
+    const { aimX, aimY } = this.skillAimPoint(sid);
+    this.sendSkill(aimX, aimY);
+  }
+
   private sendAttack(worldX: number, worldY: number) {
     if (!this.room || !this.canFight()) return;
     const sid = this.room.sessionId;
     const me = this.room.state.players.get(sid);
     if (!me) return;
-    this.haltMovement();
+    const touchHoldFire = isTouchUiActive() && getAttackHoldActive();
+    if (!touchHoldFire) {
+      this.haltMovement();
+    }
     const origin = this.combatOrigin(sid);
     const owned = parseSkillIds(me.ownedSkillIds);
     this.showDamageTelegraph(
@@ -347,6 +385,7 @@ export class WorldScene extends Phaser.Scene {
     const vfx = this.visualPos(sid);
     this.setFacingToward(worldX, worldY, vfx.x, vfx.y);
     this.room.send("attack", { aimX: worldX, aimY: worldY });
+    recordClientBasicAttack();
     playSfx("hit");
     const flash = this.add.circle(vfx.x, vfx.y, 28, 0xffeedd, 0.25);
     flash.setDepth(9);
@@ -486,6 +525,12 @@ export class WorldScene extends Phaser.Scene {
     if (this.cursors?.up.isDown || this.wasd?.W.isDown) iy -= 1;
     if (this.cursors?.down.isDown || this.wasd?.S.isDown) iy += 1;
 
+    const touch = getMoveVector();
+    if (touch.x !== 0 || touch.y !== 0) {
+      ix = touch.x;
+      iy = touch.y;
+    }
+
     if (ix !== 0 || iy !== 0) {
       const len = Math.hypot(ix, iy);
       this.facing = { x: ix / len, y: iy / len };
@@ -514,6 +559,22 @@ export class WorldScene extends Phaser.Scene {
         const { aimX, aimY } = this.skillAimPoint(sid);
         this.sendSkill(aimX, aimY);
         combatThisFrame = true;
+      }
+    }
+
+    if (
+      isTouchUiActive() &&
+      getAttackHoldActive() &&
+      !draftLocked &&
+      this.canFight()
+    ) {
+      const sid = this.room.sessionId;
+      if (this.room.state.players.get(sid)) {
+        if (now - this.lastTouchAttackClientMs >= BASIC_ATTACK_COOLDOWN_MS) {
+          const { aimX, aimY } = this.touchCombatAimPoint(sid);
+          this.sendAttack(aimX, aimY);
+          this.lastTouchAttackClientMs = now;
+        }
       }
     }
 
