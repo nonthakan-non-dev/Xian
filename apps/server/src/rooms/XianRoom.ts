@@ -71,17 +71,13 @@ import {
   RUN_SUMMARY_MESSAGE,
   resolveFacingUnitVector,
   type RunSummaryPayload,
-  rollOrbWithVassana,
   SHADOW_WARP_RANGE,
   SHIELD_DURATION_MS,
   SLOW_MS,
   STUN_MS,
   shadowStealthSpeedBonus,
-  addVassanaOnDemonKill,
   damageDemon,
-  isInAnyDemonZone,
   maxQiForRealm,
-  tickVassana,
   TICK_RATE_MS,
 } from "@xian/shared";
 import { Demon, Herb, Orb, Player, XianState } from "../schema.js";
@@ -203,7 +199,6 @@ export class XianRoom extends Room {
     player.currentQi = 20;
     player.realmFloor = 1;
     player.qiLayer = 1;
-    player.vassana = 0;
     player.ownedSkillIds = "";
     player.awaitingSkillDraft = false;
     player.draftOfferIds = "";
@@ -434,12 +429,6 @@ export class XianRoom extends Room {
         continue;
       }
 
-      player.vassana = tickVassana(
-        player.vassana,
-        dt,
-        isInAnyDemonZone(player.x, player.y),
-      );
-
       this.tickPoisonDecayForPlayer(sessionId, player, now);
       this.tryBodyShieldShockwave(sessionId, player, now);
 
@@ -503,7 +492,7 @@ export class XianRoom extends Room {
             ([, d]) => d === demon,
           )?.[0];
           if (demonId) {
-            this.killDemon(demon, demonId, undefined);
+            this.killDemon(demon, demonId);
           }
         }
       }
@@ -551,7 +540,7 @@ export class XianRoom extends Room {
         const demon = target.entity as Demon;
         this.damageDemonAt(demon, FLYING_SWORD_DAMAGE);
         if (demon.currentQi <= 0) {
-          this.killDemon(demon, target.id, player);
+          this.killDemon(demon, target.id);
         }
       }
     }
@@ -818,7 +807,7 @@ export class XianRoom extends Room {
         )
       ) {
         this.damageDemonAt(demon, damage, { crit });
-        if (demon.currentQi <= 0) this.killDemon(demon, demonId, attacker);
+        if (demon.currentQi <= 0) this.killDemon(demon, demonId);
       }
     }
   }
@@ -875,7 +864,7 @@ export class XianRoom extends Room {
       if (demon.currentQi <= 0) continue;
       if (distPoint(aimX, aimY, demon.x, demon.y) <= radius) {
         this.damageDemonAt(demon, damage, { crit });
-        if (demon.currentQi <= 0) this.killDemon(demon, demonId, attacker);
+        if (demon.currentQi <= 0) this.killDemon(demon, demonId);
       }
     }
   }
@@ -928,7 +917,7 @@ export class XianRoom extends Room {
         attacker.y = demon.y;
         this.damageDemonAt(demon, damage, { crit });
         this.applyPoisonToDemon(demonId, demon);
-        if (demon.currentQi <= 0) this.killDemon(demon, demonId, attacker);
+        if (demon.currentQi <= 0) this.killDemon(demon, demonId);
         return;
       }
     }
@@ -990,7 +979,7 @@ export class XianRoom extends Room {
         }
         this.damageDemonAt(demon, damage, { crit });
         if (demon.currentQi <= 0) {
-          this.killDemon(demon, demonId, attacker);
+          this.killDemon(demon, demonId);
         }
       }
     }
@@ -1062,7 +1051,7 @@ export class XianRoom extends Room {
         }
         this.damageDemonAt(demon, damage, { crit });
         if (demon.currentQi <= 0) {
-          this.killDemon(demon, demonId, attacker);
+          this.killDemon(demon, demonId);
         }
       }
     }
@@ -1251,7 +1240,6 @@ export class XianRoom extends Room {
       name: player.name,
       realmFloor: player.realmFloor,
       qiLayer: player.qiLayer,
-      vassana: player.vassana,
       ownedSkillIds: player.ownedSkillIds,
       peakCurrentQi,
       survivalSec,
@@ -1267,13 +1255,10 @@ export class XianRoom extends Room {
     this.state.players.delete(sessionId);
   }
 
-  private killDemon(demon: Demon, demonId: string, killer: Player | undefined) {
+  private killDemon(demon: Demon, demonId: string) {
     const kind = demon.kind as DemonKind;
     const stats = DEMON_STATS[kind] ?? DEMON_STATS.wild;
     this.spawnOrbAt(demon.x, demon.y, stats.orbDrop);
-    if (killer) {
-      killer.vassana = addVassanaOnDemonKill(killer.vassana);
-    }
     this.poisonDecayByKey.delete(this.poisonKeyDemon(demonId));
     this.state.demons.delete(demonId);
     this.clock.setTimeout(() => this.tryRespawnDemon(demon.zoneId, kind), 4000);
@@ -1395,7 +1380,7 @@ export class XianRoom extends Room {
       );
       if (dist <= pickupR) {
         const base = orb.value > 0 ? orb.value : ORB_VALUE;
-        const gained = rollOrbWithVassana(base, player.vassana);
+        const gained = base;
         const prevFloor = player.realmFloor;
         const updated = applyQiGainWithCultivation(
           player.currentQi,

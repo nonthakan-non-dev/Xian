@@ -80,10 +80,6 @@ _Avoid_: debuff timer ทั่วไป
 Passive ของ DaoPath เต๋าอัคนี สะสมแต้มสายฟ้าเพื่อ crit
 _Avoid_: combo meter
 
-**Vassana**:
-ค่าดวงชะตาในห้อง ส่งผลโอกาสได้ของดีจาก orb และ herb
-_Avoid_: karma, บาป, บุญ
-
 **Demon**:
 อสูร PvE มี CurrentQi เป็นชีวิต ฆ่าแล้วดรอปลิงหปราณ
 _Avoid_: mob, monster, NPC enemy
@@ -93,7 +89,7 @@ _Avoid_: mob, monster, NPC enemy
 _Avoid_: PvE area, dungeon
 
 **CultivationRun**:
-ช่วงเล่นหนึ่งรอบตั้งแต่เข้าห้องจน RunEnd — progress (RealmFloor, SkillLoadout, Vassana, …) ผูกกับ run นี้
+ช่วงเล่นหนึ่งรอบตั้งแต่เข้าห้องจน RunEnd — progress (RealmFloor, SkillLoadout, …) ผูกกับ run นี้
 _Avoid_: session, life, respawn loop
 
 **RunEnd**:

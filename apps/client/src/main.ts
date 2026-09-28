@@ -6,7 +6,6 @@ import {
   parseSkillIds,
   realmDisplayName,
   SKILL_DRAFT_PICK_TIMEOUT_MS,
-  VASSANA_CAP,
   type Player,
   rollCultivatorDisplayName,
   type RunSummaryPayload,
@@ -232,10 +231,6 @@ function showRunSummaryModal(payload: RunSummaryPayload) {
 
   const realmName = realmDisplayName(payload.realmFloor, payload.qiLayer);
   const owned = parseSkillIds(payload.ownedSkillIds);
-  const vassanaPct = Math.min(
-    100,
-    Math.round((payload.vassana / VASSANA_CAP) * 100),
-  );
   const skillLines =
     owned.length > 0
       ? owned
@@ -252,7 +247,6 @@ function showRunSummaryModal(payload: RunSummaryPayload) {
   runSummaryBody.innerHTML = `
     <strong>${payload.name}</strong>
     <p>ขั้นฝึก: ${realmName}<br/>
-    วาสนา: ${vassanaPct}%<br/>
     ปราณสูงสุด: ${Math.floor(payload.peakCurrentQi)}<br/>
     รอด: ${timeLabel}</p>
     <p>วิชา (${owned.length}): ${skillLines}</p>
@@ -406,15 +400,11 @@ function updateHud() {
     (me.qiLayer as number) ?? 1,
   );
   const owned = parseSkillIds(me.ownedSkillIds);
-  const vassanaPct = Math.min(
-    100,
-    Math.round((me.vassana / VASSANA_CAP) * 100),
-  );
   const skillLine =
     owned.length > 0
       ? `<br/>วิชา: ${owned.length} · Shift: ${getSkillById(me.lastActiveSkillId)?.nameTh ?? "—"}`
       : "<br/><em>หนิงชี่ · โจมตีพื้นฐานอ่อน</em>";
-  const statsHtml = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>วาสนา: ${vassanaPct}%${skillLine}`;
+  const statsHtml = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}${skillLine}`;
   if (statsHtml !== lastStatsHtml) {
     lastStatsHtml = statsHtml;
     statsEl.innerHTML = statsHtml;

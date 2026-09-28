@@ -6,7 +6,6 @@ export type RunSummaryPayload = {
   name: string;
   realmFloor: number;
   qiLayer: number;
-  vassana: number;
   ownedSkillIds: string;
   peakCurrentQi: number;
   survivalSec: number;

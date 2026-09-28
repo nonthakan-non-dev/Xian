@@ -11,7 +11,6 @@ export const Player = schema(
     qiLayer: t.number(),
     inputX: t.number(),
     inputY: t.number(),
-    vassana: t.number(),
     ownedSkillIds: t.string(),
     awaitingSkillDraft: t.boolean(),
     draftOfferIds: t.string(),
