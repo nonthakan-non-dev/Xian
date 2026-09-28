@@ -20,6 +20,11 @@ import {
 } from "@xian/shared";
 import { drawDamageTelegraph } from "./drawTelegraph.js";
 import { isPlayerBlockedBySkillDraft } from "./draftUi.js";
+import {
+  clientSkillCooldownRemainingMs,
+  recordClientSkillUse,
+} from "./clientSkillCooldown.js";
+import { notifySkillCooldownBlocked } from "./combatFeedback.js";
 import { playSfx } from "./sfx.js";
 import {
   applyPlayerColors,
@@ -319,13 +324,20 @@ export class WorldScene extends Phaser.Scene {
     const sid = this.room.sessionId;
     const me = this.room.state.players.get(sid);
     if (!me) return;
-    this.haltMovement();
-    const origin = this.combatOrigin(sid);
-    const vfx = this.visualPos(sid);
     const skill = me.lastActiveSkillId
       ? getSkillById(me.lastActiveSkillId)
       : undefined;
-    const rc = skill?.rangeClass;
+    if (!skill || (skill.kind !== "active" && skill.kind !== "hybrid")) {
+      return;
+    }
+    if (clientSkillCooldownRemainingMs(skill) > 0) {
+      notifySkillCooldownBlocked();
+      return;
+    }
+    this.haltMovement();
+    const origin = this.combatOrigin(sid);
+    const vfx = this.visualPos(sid);
+    const rc = skill.rangeClass;
     if (rc === "dash" || rc === "line" || rc === "cone" || rc === "single") {
       const aim = this.skillAimPoint(sid);
       worldX = aim.aimX;
@@ -335,13 +347,12 @@ export class WorldScene extends Phaser.Scene {
       worldX = aim.aimX;
       worldY = aim.aimY;
     }
-    if (skill) {
-      this.showDamageTelegraph(
-        telegraphForActiveSkill(origin.x, origin.y, worldX, worldY, skill),
-        skill.cooldownMs ?? ACTIVE_SKILL_COOLDOWN_MS,
-        true,
-      );
-    }
+    this.showDamageTelegraph(
+      telegraphForActiveSkill(origin.x, origin.y, worldX, worldY, skill),
+      skill.cooldownMs ?? ACTIVE_SKILL_COOLDOWN_MS,
+      true,
+    );
+    recordClientSkillUse();
     this.room.send("skill", { aimX: worldX, aimY: worldY });
     playSfx("skill");
     const r = playerBodyRadius(me.realmFloor);

@@ -18,6 +18,8 @@ import {
   isDraftPickPending,
   markDraftPickSent,
 } from "./draftUi.js";
+import { clientSkillCooldownForPlayer } from "./clientSkillCooldown.js";
+import { setSkillCooldownBlockedHandler } from "./combatFeedback.js";
 
 const SERVER_URL =
   import.meta.env.VITE_SERVER_URL ?? "http://localhost:2567";
@@ -42,6 +44,12 @@ const toast = document.getElementById("toast")!;
 const skillDraftOverlay = document.getElementById("skill-draft-overlay")!;
 const skillDraftOptions = document.getElementById("skill-draft-options")!;
 const skillDraftSubtitle = document.getElementById("skill-draft-subtitle")!;
+const skillCooldownEl = document.getElementById("skill-cooldown")!;
+const skillCooldownName = document.getElementById("skill-cooldown-name")!;
+const skillCooldownLabel = document.getElementById("skill-cooldown-label")!;
+const skillCooldownFill = document.getElementById("skill-cooldown-fill")!;
+
+let skillCooldownHudRaf = 0;
 
 let room: Room<XianState> | null = null;
 /** Instant draft UI before schema patch arrives (no “waiting for server”). */
@@ -177,6 +185,56 @@ function wireSkillDraftListeners(activeRoom: Room<XianState>) {
   });
 }
 
+function stopSkillCooldownHudLoop() {
+  if (skillCooldownHudRaf) {
+    cancelAnimationFrame(skillCooldownHudRaf);
+    skillCooldownHudRaf = 0;
+  }
+}
+
+function startSkillCooldownHudLoop() {
+  stopSkillCooldownHudLoop();
+  const tick = () => {
+    updateSkillCooldownHud();
+    skillCooldownHudRaf = requestAnimationFrame(tick);
+  };
+  skillCooldownHudRaf = requestAnimationFrame(tick);
+}
+
+function updateSkillCooldownHud() {
+  if (!room) return;
+  const me = room.state.players.get(room.sessionId);
+  if (!me?.lastActiveSkillId) {
+    skillCooldownEl.classList.add("hidden");
+    return;
+  }
+  const skillMeta = getSkillById(me.lastActiveSkillId);
+  if (
+    !skillMeta ||
+    (skillMeta.kind !== "active" && skillMeta.kind !== "hybrid")
+  ) {
+    skillCooldownEl.classList.add("hidden");
+    return;
+  }
+  skillCooldownEl.classList.remove("hidden");
+  skillCooldownName.textContent = skillMeta.nameTh;
+
+  const { remainingMs, totalMs } = clientSkillCooldownForPlayer(
+    me.lastActiveSkillId,
+  );
+  if (remainingMs > 0) {
+    skillCooldownEl.classList.add("cooling");
+    const ratio = remainingMs / totalMs;
+    skillCooldownFill.style.transform = `scaleX(${ratio})`;
+    const sec = (remainingMs / 1000).toFixed(1);
+    skillCooldownLabel.textContent = `คูลดาว ${sec}s`;
+  } else {
+    skillCooldownEl.classList.remove("cooling");
+    skillCooldownFill.style.transform = "scaleX(1)";
+    skillCooldownLabel.textContent = "พร้อม · คลิกขวา / Shift";
+  }
+}
+
 function updateHud() {
   if (!room) return;
   const me = room.state.players.get(room.sessionId);
@@ -219,6 +277,7 @@ function updateHud() {
 async function joinGame() {
   const name = nameInput.value.trim() || "นักบำเพ็ต";
   joinBtn.disabled = true;
+  setSkillCooldownBlockedHandler(() => showToast("วิชาติดคูลดาว — รอสักครู่"));
   try {
     const client = new Client(SERVER_URL);
     room = await joinXianRoom(client, SERVER_URL, name);
@@ -291,6 +350,8 @@ async function joinGame() {
       syncChallengeBanner();
     });
     updateHud();
+    updateSkillCooldownHud();
+    startSkillCooldownHudLoop();
     syncSkillDraftModal();
     syncChallengeBanner();
 

@@ -189,6 +189,67 @@ body {
   font-weight: 600;
 }
 
+.skill-cooldown {
+  position: fixed;
+  left: 12px;
+  bottom: 36px;
+  z-index: 6;
+  width: min(220px, 42vw);
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(122, 176, 255, 0.35);
+  pointer-events: none;
+}
+
+.skill-cooldown.hidden {
+  display: none;
+}
+
+.skill-cooldown-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  margin-bottom: 6px;
+}
+
+#skill-cooldown-name {
+  font-weight: 600;
+  opacity: 0.95;
+}
+
+#skill-cooldown-label {
+  font-size: 0.72rem;
+  opacity: 0.85;
+}
+
+.skill-cooldown.cooling #skill-cooldown-label {
+  color: #ffaa77;
+}
+
+.skill-cooldown-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.skill-cooldown-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #5a9ae8, #9cc8ff);
+  transform-origin: left center;
+  transform: scaleX(1);
+  transition: transform 0.05s linear;
+}
+
+.skill-cooldown.cooling .skill-cooldown-fill {
+  background: linear-gradient(90deg, #886644, #cc9966);
+}
+
 .hint {
   position: fixed;
   bottom: 8px;
