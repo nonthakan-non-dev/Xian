@@ -458,7 +458,7 @@ export class XianRoom extends Room {
     return m;
   }
 
-  private afterRealmPromote(player: Player) {
+  private afterRealmPromote(player: Player, sessionId: string) {
     if (player.awaitingSkillDraft) return;
     const pool = getSkillPoolForRealm(player.realmFloor).map((s) => s.id);
     const offers = rollSkillDraft(pool, this.ownedSkills(player), Math.random);
@@ -469,6 +469,12 @@ export class XianRoom extends Room {
     }
     player.awaitingSkillDraft = true;
     player.draftOfferIds = formatSkillIds(offers);
+    const client = this.clients.find((c) => c.sessionId === sessionId);
+    client?.send("skillDraftOpen", {
+      offerIds: offers,
+      realmFloor: player.realmFloor,
+      qiLayer: player.qiLayer,
+    });
   }
 
   private handlePickSkillDraft(sessionId: string, skillId: string): boolean {
@@ -551,8 +557,8 @@ export class XianRoom extends Room {
       }
 
       if (!player.awaitingSkillDraft) {
-        this.tryPickupOrbs(player);
-        this.tryPickupHerbs(player);
+        this.tryPickupOrbs(sessionId, player);
+        this.tryPickupHerbs(sessionId, player);
         this.tickFlyingSwords(player, now);
       }
     }
@@ -1434,7 +1440,7 @@ export class XianRoom extends Room {
     this.state.demons.set(demon.id, demon);
   }
 
-  private tryPickupOrbs(player: Player) {
+  private tryPickupOrbs(sessionId: string, player: Player) {
     if (player.awaitingSkillDraft) return;
     const toRemove: string[] = [];
     for (const [id, orb] of this.state.orbs) {
@@ -1457,7 +1463,7 @@ export class XianRoom extends Room {
         player.realmFloor = updated.realmFloor;
         player.qiLayer = updated.qiLayer;
         if (player.realmFloor > prevFloor) {
-          this.afterRealmPromote(player);
+          this.afterRealmPromote(player, sessionId);
           toRemove.push(id);
           break;
         }
@@ -1469,7 +1475,7 @@ export class XianRoom extends Room {
     }
   }
 
-  private tryPickupHerbs(player: Player) {
+  private tryPickupHerbs(sessionId: string, player: Player) {
     if (player.awaitingSkillDraft) return;
     const toRemove: string[] = [];
     for (const [id, herb] of this.state.herbs) {
@@ -1490,7 +1496,7 @@ export class XianRoom extends Room {
         player.realmFloor = updated.realmFloor;
         player.qiLayer = updated.qiLayer;
         if (player.realmFloor > prevFloor) {
-          this.afterRealmPromote(player);
+          this.afterRealmPromote(player, sessionId);
           player.herbBuffUntil = this.nowMs() + HERB_BUFF_MS;
           toRemove.push(id);
           break;

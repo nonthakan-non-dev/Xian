@@ -39,6 +39,9 @@ const skillDraftOptions = document.getElementById("skill-draft-options")!;
 const skillDraftSubtitle = document.getElementById("skill-draft-subtitle")!;
 
 let room: Room<XianState> | null = null;
+/** Instant draft UI before schema patch arrives (no “waiting for server”). */
+let instantDraftOffers: string[] | null = null;
+let instantDraftRealm: { realmFloor: number; qiLayer: number } | null = null;
 
 const sfxMute = document.getElementById("sfx-mute") as HTMLInputElement;
 sfxMute.checked = isSfxMuted();
@@ -72,27 +75,18 @@ challengeDecline.addEventListener("click", () => {
   challengeBanner.classList.add("hidden");
 });
 
+function clearInstantDraftCache() {
+  instantDraftOffers = null;
+  instantDraftRealm = null;
+}
+
 function hideSkillDraftModal() {
   skillDraftOverlay.classList.add("hidden");
   skillDraftOptions.innerHTML = "";
 }
 
-function syncSkillDraftModal() {
-  if (!room) return;
-  const me = room.state.players.get(room.sessionId);
-  if (!me?.awaitingSkillDraft) {
-    hideSkillDraftModal();
-    return;
-  }
-  const offers = parseSkillIds(me.draftOfferIds);
-  if (offers.length === 0) {
-    skillDraftSubtitle.textContent = "กำลังรอตัวเลือกวิชาจากเซิร์ver…";
-    skillDraftOptions.innerHTML = "";
-    skillDraftOverlay.classList.remove("hidden");
-    return;
-  }
-  skillDraftSubtitle.textContent = `ขั้น ${realmDisplayName(me.realmFloor, me.qiLayer)} — เลือกหนึ่งในสาม`;
-  skillDraftOptions.innerHTML = offers
+function renderSkillDraftButtons(offerIds: string[]) {
+  skillDraftOptions.innerHTML = offerIds
     .map((id) => {
       const skill = getSkillById(id);
       if (!skill) return "";
@@ -105,21 +99,42 @@ function syncSkillDraftModal() {
       return `<button type="button" class="skill-draft-btn" data-skill-id="${id}"><strong>${skill.nameTh}</strong><span>${kind} · ${skill.descriptionTh}</span></button>`;
     })
     .join("");
-  skillDraftOverlay.classList.remove("hidden");
   for (const btn of skillDraftOptions.querySelectorAll<HTMLButtonElement>(
     ".skill-draft-btn",
   )) {
     btn.onclick = () => {
       const id = btn.dataset.skillId;
       if (!id || !room) return;
-      for (const b of skillDraftOptions.querySelectorAll<HTMLButtonElement>(
-        ".skill-draft-btn",
-      )) {
-        b.disabled = true;
-      }
+      hideSkillDraftModal();
+      clearInstantDraftCache();
       room.send("pickSkillDraft", { skillId: id });
     };
   }
+}
+
+function syncSkillDraftModal() {
+  if (!room) return;
+  const me = room.state.players.get(room.sessionId);
+  const awaiting = me?.awaitingSkillDraft ?? false;
+  const syncedOffers = me ? parseSkillIds(me.draftOfferIds) : [];
+  const offers =
+    syncedOffers.length > 0 ? syncedOffers : (instantDraftOffers ?? []);
+
+  if (!awaiting && offers.length === 0) {
+    hideSkillDraftModal();
+    clearInstantDraftCache();
+    return;
+  }
+
+  if (offers.length === 0) {
+    return;
+  }
+
+  const floor = me?.realmFloor ?? instantDraftRealm?.realmFloor ?? 1;
+  const layer = me?.qiLayer ?? instantDraftRealm?.qiLayer ?? 1;
+  skillDraftSubtitle.textContent = `ขั้น ${realmDisplayName(floor, layer)} — เลือกหนึ่งในสาม`;
+  renderSkillDraftButtons(offers);
+  skillDraftOverlay.classList.remove("hidden");
 }
 
 function wireSkillDraftListeners(activeRoom: Room<XianState>) {
@@ -223,8 +238,24 @@ async function joinGame() {
         );
       },
     );
+    room.onMessage(
+      "skillDraftOpen",
+      (msg: {
+        offerIds: string[];
+        realmFloor: number;
+        qiLayer: number;
+      }) => {
+        instantDraftOffers = msg.offerIds ?? [];
+        instantDraftRealm = {
+          realmFloor: msg.realmFloor,
+          qiLayer: msg.qiLayer,
+        };
+        syncSkillDraftModal();
+      },
+    );
     room.onMessage("skillDraftComplete", () => {
       hideSkillDraftModal();
+      clearInstantDraftCache();
       updateHud();
     });
     room.onMessage("skillDraftRejected", () => {
