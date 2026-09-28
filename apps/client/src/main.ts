@@ -6,6 +6,7 @@ import {
   isInDuelZone,
   parseSkillIds,
   realmDisplayName,
+  SKILL_DRAFT_PICK_TIMEOUT_MS,
   VASSANA_CAP,
   type Player,
   type XianState,
@@ -43,6 +44,7 @@ const toast = document.getElementById("toast")!;
 const skillDraftOverlay = document.getElementById("skill-draft-overlay")!;
 const skillDraftOptions = document.getElementById("skill-draft-options")!;
 const skillDraftSubtitle = document.getElementById("skill-draft-subtitle")!;
+const skillDraftTimer = document.getElementById("skill-draft-timer")!;
 const skillCooldownEl = document.getElementById("skill-cooldown")!;
 const skillCooldownName = document.getElementById("skill-cooldown-name")!;
 const skillCooldownLabel = document.getElementById("skill-cooldown-label")!;
@@ -54,8 +56,12 @@ let room: Room<XianState> | null = null;
 /** Instant draft UI before schema patch arrives (no “waiting for server”). */
 let instantDraftOffers: string[] | null = null;
 let instantDraftRealm: { realmFloor: number; qiLayer: number } | null = null;
+let instantDraftDeadlineMs: number | null = null;
 /** กัน onStateChange ทุก tick สร้างปุ่มใหม่จนกดไม่ติด */
 let lastRenderedDraftOffersKey = "";
+let draftCountdownTimer = 0;
+/** คงข้อความขั้นฝึกตอนเปิด draft — ไม่อัปเดตทุก state patch */
+let frozenDraftSubtitle = "";
 
 const sfxMute = document.getElementById("sfx-mute") as HTMLInputElement;
 sfxMute.checked = isSfxMuted();
@@ -100,12 +106,69 @@ challengeDecline.addEventListener("click", () => {
 function clearInstantDraftCache() {
   instantDraftOffers = null;
   instantDraftRealm = null;
+  instantDraftDeadlineMs = null;
+}
+
+function getDraftDeadlineMs(): number {
+  const me = room?.state.players.get(room.sessionId);
+  const fromSchema = me?.draftDeadlineMs ?? 0;
+  if (fromSchema > 0) return fromSchema;
+  if (instantDraftDeadlineMs && instantDraftDeadlineMs > 0) {
+    return instantDraftDeadlineMs;
+  }
+  return 0;
+}
+
+function freezeDraftSubtitle(floor: number, layer: number) {
+  frozenDraftSubtitle = `ขั้น ${realmDisplayName(floor, layer)} — เลือกหนึ่งในสาม`;
+  skillDraftSubtitle.textContent = frozenDraftSubtitle;
+}
+
+function stopDraftCountdown() {
+  if (draftCountdownTimer) {
+    window.clearInterval(draftCountdownTimer);
+    draftCountdownTimer = 0;
+  }
+}
+
+function updateDraftCountdownUi() {
+  if (frozenDraftSubtitle) {
+    skillDraftSubtitle.textContent = frozenDraftSubtitle;
+  }
+  const deadline = getDraftDeadlineMs();
+  if (deadline <= 0) {
+    skillDraftTimer.classList.add("hidden");
+    skillDraftTimer.textContent = "";
+    return;
+  }
+  const sec = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+  skillDraftTimer.classList.remove("hidden");
+  skillDraftTimer.classList.toggle("urgent", sec <= 10);
+  skillDraftTimer.textContent =
+    sec > 0
+      ? `จะสุ่มวิชาให้ในอีก ${sec} วินาที`
+      : "กำลังสุ่มวิชา…";
+}
+
+function startDraftCountdown() {
+  stopDraftCountdown();
+  updateDraftCountdownUi();
+  draftCountdownTimer = window.setInterval(() => {
+    if (skillDraftOverlay.classList.contains("hidden")) {
+      stopDraftCountdown();
+      return;
+    }
+    updateDraftCountdownUi();
+  }, 200);
 }
 
 function hideSkillDraftModal() {
+  stopDraftCountdown();
+  frozenDraftSubtitle = "";
   skillDraftOverlay.classList.add("hidden");
   skillDraftOptions.innerHTML = "";
   lastRenderedDraftOffersKey = "";
+  skillDraftTimer.classList.add("hidden");
 }
 
 function renderSkillDraftButtons(offerIds: string[]) {
@@ -160,13 +223,22 @@ function syncSkillDraftModal() {
 
   const floor = me?.realmFloor ?? instantDraftRealm?.realmFloor ?? 1;
   const layer = me?.qiLayer ?? instantDraftRealm?.qiLayer ?? 1;
-  skillDraftSubtitle.textContent = `ขั้น ${realmDisplayName(floor, layer)} — เลือกหนึ่งในสาม`;
   const offersKey = offers.join("\0");
   if (offersKey !== lastRenderedDraftOffersKey) {
     renderSkillDraftButtons(offers);
     lastRenderedDraftOffersKey = offersKey;
+    freezeDraftSubtitle(floor, layer);
+  }
+  if (!frozenDraftSubtitle) {
+    freezeDraftSubtitle(floor, layer);
+  }
+  if (getDraftDeadlineMs() <= 0 && awaiting) {
+    instantDraftDeadlineMs = Date.now() + SKILL_DRAFT_PICK_TIMEOUT_MS;
   }
   skillDraftOverlay.classList.remove("hidden");
+  if (!draftCountdownTimer) {
+    startDraftCountdown();
+  }
 }
 
 function wireSkillDraftListeners(activeRoom: Room<XianState>) {
@@ -242,6 +314,8 @@ function updateSkillCooldownHud() {
   }
 }
 
+let lastStatsHtml = "";
+
 function updateHud() {
   if (!room) return;
   const me = room.state.players.get(room.sessionId);
@@ -264,7 +338,11 @@ function updateHud() {
       owned.length > 0
         ? `<br/>วิชา: ${owned.length} · Shift: ${getSkillById(me.lastActiveSkillId)?.nameTh ?? "—"}`
         : "<br/><em>หนิงชี่ · โจมตีพื้นฐานอ่อน</em>";
-    statsEl.innerHTML = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>วาสนา: ${vassanaPct}%${skillLine}${duelHint}`;
+    const statsHtml = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>วาสนา: ${vassanaPct}%${skillLine}${duelHint}`;
+    if (statsHtml !== lastStatsHtml) {
+      lastStatsHtml = statsHtml;
+      statsEl.innerHTML = statsHtml;
+    }
   }
   const rows = [...room.state.players.values()]
     .filter((p) => p?.name)
@@ -327,21 +405,40 @@ async function joinGame() {
         offerIds: string[];
         realmFloor: number;
         qiLayer: number;
+        deadlineMs?: number;
       }) => {
         instantDraftOffers = msg.offerIds ?? [];
         instantDraftRealm = {
           realmFloor: msg.realmFloor,
           qiLayer: msg.qiLayer,
         };
+        instantDraftDeadlineMs =
+          msg.deadlineMs ?? Date.now() + SKILL_DRAFT_PICK_TIMEOUT_MS;
+        lastRenderedDraftOffersKey = "";
+        frozenDraftSubtitle = "";
+        stopDraftCountdown();
         syncSkillDraftModal();
       },
     );
-    room.onMessage("skillDraftComplete", () => {
-      markDraftPickSent();
-      hideSkillDraftModal();
-      clearInstantDraftCache();
-      updateHud();
-    });
+    room.onMessage(
+      "skillDraftComplete",
+      (msg: { skillId?: string; autoPick?: boolean }) => {
+        markDraftPickSent();
+        hideSkillDraftModal();
+        clearInstantDraftCache();
+        updateHud();
+        if (msg.autoPick) {
+          const name = msg.skillId
+            ? getSkillById(msg.skillId)?.nameTh
+            : undefined;
+          showToast(
+            name
+              ? `หมดเวลา — สุ่มวิชา「${name}」ให้แล้ว`
+              : "หมดเวลา — สุ่มวิชาให้แล้ว",
+          );
+        }
+      },
+    );
     room.onMessage("skillDraftRejected", () => {
       clearDraftUiSettled();
       showToast("เลือกวิชาไม่สำเร็จ — ลองอีกครั้ง");

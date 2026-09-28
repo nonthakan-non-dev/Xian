@@ -21,7 +21,9 @@ import {
   passiveDamageTakenMultiplier,
   qiDamageFromSkill,
   rangeForSkillClass,
+  pickRandomDraftOffer,
   rollSkillDraft,
+  SKILL_DRAFT_PICK_TIMEOUT_MS,
   resolveBasicAttackDamage,
   resolveBasicAttackRange,
   skillAppliesPoisonOnHit,
@@ -206,6 +208,7 @@ export class XianRoom extends Room {
         if (ok) {
           client.send("skillDraftComplete", {
             skillId: String(data.skillId ?? ""),
+            autoPick: false,
           });
         } else {
           client.send("skillDraftRejected", {
@@ -239,6 +242,7 @@ export class XianRoom extends Room {
     player.ownedSkillIds = "";
     player.awaitingSkillDraft = false;
     player.draftOfferIds = "";
+    player.draftDeadlineMs = 0;
     player.lastActiveSkillId = "";
     player.poisonStacks = 0;
     player.overloadStacks = 0;
@@ -467,16 +471,52 @@ export class XianRoom extends Room {
     if (offers.length === 0) {
       player.awaitingSkillDraft = false;
       player.draftOfferIds = "";
+      player.draftDeadlineMs = 0;
       return;
     }
     player.awaitingSkillDraft = true;
     player.draftOfferIds = formatSkillIds(offers);
+    const deadlineMs = Date.now() + SKILL_DRAFT_PICK_TIMEOUT_MS;
+    player.draftDeadlineMs = deadlineMs;
     const client = this.clients.find((c) => c.sessionId === sessionId);
     client?.send("skillDraftOpen", {
       offerIds: offers,
       realmFloor: player.realmFloor,
       qiLayer: player.qiLayer,
+      deadlineMs,
     });
+  }
+
+  private autoPickSkillDraft(sessionId: string): void {
+    const player = this.state.players.get(sessionId);
+    if (!player?.awaitingSkillDraft) {
+      return;
+    }
+    player.draftDeadlineMs = 0;
+    const offers = parseSkillIds(player.draftOfferIds);
+    const skillId = pickRandomDraftOffer(offers, Math.random);
+    if (!skillId) {
+      player.awaitingSkillDraft = false;
+      player.draftOfferIds = "";
+      return;
+    }
+    const ok = this.handlePickSkillDraft(sessionId, skillId);
+    if (!ok) return;
+    const client = this.clients.find((c) => c.sessionId === sessionId);
+    client?.send("skillDraftComplete", {
+      skillId,
+      autoPick: true,
+    });
+  }
+
+  private tickSkillDraftTimeouts() {
+    const now = Date.now();
+    for (const [sessionId, player] of this.state.players) {
+      if (!player.awaitingSkillDraft) continue;
+      const deadline = player.draftDeadlineMs;
+      if (deadline <= 0 || now < deadline) continue;
+      this.autoPickSkillDraft(sessionId);
+    }
   }
 
   private handlePickSkillDraft(sessionId: string, skillId: string): boolean {
@@ -497,12 +537,14 @@ export class XianRoom extends Room {
     player.draftOfferIds = formatSkillIds(result.draftOfferIds);
     player.awaitingSkillDraft = result.awaitingSkillDraft;
     player.lastActiveSkillId = result.lastActiveSkillId;
+    player.draftDeadlineMs = 0;
     return true;
   }
 
   private tick() {
     const dt = TICK_RATE_MS / 1000;
     const now = this.nowMs();
+    this.tickSkillDraftTimeouts();
 
     for (const [sessionId, player] of this.state.players) {
       if (player.currentQi <= 0) {

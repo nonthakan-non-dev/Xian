@@ -15,6 +15,8 @@ export const Player = schema(
     ownedSkillIds: t.string(),
     awaitingSkillDraft: t.boolean(),
     draftOfferIds: t.string(),
+    /** Absolute server ms; 0 = no draft timer. */
+    draftDeadlineMs: t.number(),
     lastActiveSkillId: t.string(),
     poisonStacks: t.number(),
     overloadStacks: t.number(),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applySkillPick,
+  pickRandomDraftOffer,
   playerIgnoresIncomingDamage,
   rollSkillDraft,
   shouldOpenSkillDraft,
@@ -73,6 +74,15 @@ describe("playerIgnoresIncomingDamage", () => {
   it("is true while awaiting SkillDraft", () => {
     expect(playerIgnoresIncomingDamage(true)).toBe(true);
     expect(playerIgnoresIncomingDamage(false)).toBe(false);
+  });
+});
+
+describe("pickRandomDraftOffer", () => {
+  it("returns one of the current offers", () => {
+    const offers = ["a", "b", "c"];
+    expect(pickRandomDraftOffer(offers, () => 0)).toBe("a");
+    expect(pickRandomDraftOffer(offers, () => 0.99)).toBe("c");
+    expect(pickRandomDraftOffer([], () => 0)).toBeUndefined();
   });
 });
 

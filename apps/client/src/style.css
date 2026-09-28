@@ -295,6 +295,21 @@ body {
   text-align: left;
 }
 
+.skill-draft-timer {
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #a8d4ff;
+}
+
+.skill-draft-timer.urgent {
+  color: #ffaa77;
+}
+
+.skill-draft-timer.hidden {
+  display: none;
+}
+
 .skill-draft-options {
   display: flex;
   flex-direction: column;

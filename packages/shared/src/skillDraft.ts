@@ -15,6 +15,18 @@ export type SkillDraftPickResult = {
   lastActiveSkillId: string;
 };
 
+/** หมดเวลาแล้ว server สุ่มเลือกวิชาให้ (กัน AFK ระหว่าง draft). */
+export const SKILL_DRAFT_PICK_TIMEOUT_MS = 30_000;
+
+export function pickRandomDraftOffer(
+  draftOfferIds: readonly string[],
+  random: () => number,
+): string | undefined {
+  if (draftOfferIds.length === 0) return undefined;
+  const idx = Math.floor(random() * draftOfferIds.length);
+  return draftOfferIds[idx];
+}
+
 export function shouldOpenSkillDraft(
   prevRealmFloor: number,
   nextRealmFloor: number,
