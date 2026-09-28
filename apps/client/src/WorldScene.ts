@@ -24,7 +24,10 @@ import {
   clientSkillCooldownRemainingMs,
   recordClientSkillUse,
 } from "./clientSkillCooldown.js";
-import { notifySkillCooldownBlocked } from "./combatFeedback.js";
+import {
+  notifySkillCooldownBlocked,
+  setSkillCooldownBlockedHandler,
+} from "./combatFeedback.js";
 import { playSfx } from "./sfx.js";
 import {
   applyPlayerColors,
@@ -162,8 +165,33 @@ export class WorldScene extends Phaser.Scene {
       },
     );
 
+    setSkillCooldownBlockedHandler(() => this.spawnCooldownHint());
+
     this.syncWorldFromState();
     this.room.onStateChange(() => this.syncWorldFromState());
+  }
+
+  private spawnCooldownHint() {
+    const sid = this.room?.sessionId;
+    if (!sid) return;
+    const { x, y } = this.visualPos(sid);
+    const text = this.add
+      .text(x, y, "ติดคูลดาว", {
+        fontSize: "13px",
+        color: "#ffccaa",
+        stroke: "#1a1008",
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5, 0.5)
+      .setDepth(45);
+    this.tweens.add({
+      targets: text,
+      y: y - 36,
+      alpha: 0,
+      duration: 550,
+      ease: "Cubic.easeOut",
+      onComplete: () => text.destroy(),
+    });
   }
 
   private spawnDamageNumber(

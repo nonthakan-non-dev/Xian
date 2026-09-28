@@ -19,7 +19,6 @@ import {
   markDraftPickSent,
 } from "./draftUi.js";
 import { clientSkillCooldownForPlayer } from "./clientSkillCooldown.js";
-import { setSkillCooldownBlockedHandler } from "./combatFeedback.js";
 
 const SERVER_URL =
   import.meta.env.VITE_SERVER_URL ?? "http://localhost:2567";
@@ -285,7 +284,6 @@ function updateHud() {
 async function joinGame() {
   const name = nameInput.value.trim() || "นักบำเพ็ต";
   joinBtn.disabled = true;
-  setSkillCooldownBlockedHandler(() => showToast("ติดคูลดาว", "mini"));
   try {
     const client = new Client(SERVER_URL);
     room = await joinXianRoom(client, SERVER_URL, name);
