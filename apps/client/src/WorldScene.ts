@@ -11,6 +11,7 @@ import {
   MAP_WIDTH,
   parseSkillIds,
   playerBodyRadius,
+  realmDisplayName,
   telegraphForActiveSkill,
   telegraphForBasicAttack,
   type DamageTelegraph,
@@ -155,8 +156,53 @@ export class WorldScene extends Phaser.Scene {
 
     setSkillCooldownBlockedHandler(() => this.spawnCooldownHint());
 
+    this.room.onMessage(
+      "skillDraftCelebrate",
+      (msg: { realmFloor: number; qiLayer: number }) => {
+        this.spawnRealmPromoteCelebration(msg.realmFloor, msg.qiLayer);
+      },
+    );
+
     this.syncWorldFromState();
     this.room.onStateChange(() => this.syncWorldFromState());
+  }
+
+  private spawnRealmPromoteCelebration(realmFloor: number, qiLayer: number) {
+    const sid = this.room?.sessionId;
+    if (!sid) return;
+    const { x, y } = this.visualPos(sid);
+    const title = realmDisplayName(realmFloor, qiLayer);
+    const ring = this.add.circle(x, y, 36, 0xffdd88, 0.45);
+    ring.setDepth(12);
+    this.tweens.add({
+      targets: ring,
+      scale: 2.8,
+      alpha: 0,
+      duration: 900,
+      ease: "Cubic.easeOut",
+      onComplete: () => ring.destroy(),
+    });
+    const text = this.add
+      .text(x, y - 48, `ขั้นฝึกขึ้น!\n${title}`, {
+        fontSize: "18px",
+        color: "#ffeebb",
+        fontStyle: "bold",
+        align: "center",
+        stroke: "#2a1808",
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5, 0.5)
+      .setDepth(46);
+    this.tweens.add({
+      targets: text,
+      y: y - 100,
+      alpha: 0,
+      duration: 1000,
+      delay: 350,
+      ease: "Cubic.easeOut",
+      onComplete: () => text.destroy(),
+    });
+    playSfx("skill");
   }
 
   private spawnCooldownHint() {

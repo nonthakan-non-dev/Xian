@@ -18,6 +18,9 @@ export type SkillDraftPickResult = {
 /** หมดเวลาแล้ว server สุ่มเลือกวิชาให้ (กัน AFK ระหว่าง draft). */
 export const SKILL_DRAFT_PICK_TIMEOUT_MS = 30_000;
 
+/** ก่อนเปิด modal เลือกวิชา — แสดงขึ้นขั้น (client VFX). */
+export const SKILL_DRAFT_CELEBRATE_MS = 1200;
+
 export function pickRandomDraftOffer(
   draftOfferIds: readonly string[],
   random: () => number,

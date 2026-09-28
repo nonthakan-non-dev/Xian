@@ -53,6 +53,9 @@ let lastRenderedDraftOffersKey = "";
 let draftCountdownTimer = 0;
 /** คงข้อความขั้นฝึกตอนเปิด draft — ไม่อัปเดตทุก state patch */
 let frozenDraftSubtitle = "";
+/** หลัง celebrate — เปิด modal เลือกวิชาได้ */
+let skillDraftPickPhaseOpen = false;
+let skillDraftHideTimer = 0;
 
 const sfxMute = document.getElementById("sfx-mute") as HTMLInputElement;
 sfxMute.checked = isSfxMuted();
@@ -76,6 +79,11 @@ function clearInstantDraftCache() {
   instantDraftOffers = null;
   instantDraftRealm = null;
   instantDraftDeadlineMs = null;
+  skillDraftPickPhaseOpen = false;
+}
+
+function isSkillDraftPickPhase(): boolean {
+  return skillDraftPickPhaseOpen || getDraftDeadlineMs() > 0;
 }
 
 function getDraftDeadlineMs(): number {
@@ -133,11 +141,24 @@ function startDraftCountdown() {
 
 function hideSkillDraftModal() {
   stopDraftCountdown();
+  window.clearTimeout(skillDraftHideTimer);
   frozenDraftSubtitle = "";
-  skillDraftOverlay.classList.add("hidden");
-  skillDraftOptions.innerHTML = "";
-  lastRenderedDraftOffersKey = "";
-  skillDraftTimer.classList.add("hidden");
+  skillDraftOverlay.classList.remove("is-visible");
+  skillDraftHideTimer = window.setTimeout(() => {
+    skillDraftOverlay.classList.add("hidden");
+    skillDraftOptions.innerHTML = "";
+    lastRenderedDraftOffersKey = "";
+    skillDraftTimer.classList.add("hidden");
+  }, 280);
+}
+
+function revealSkillDraftModal() {
+  window.clearTimeout(skillDraftHideTimer);
+  skillDraftOverlay.classList.remove("hidden");
+  skillDraftOverlay.classList.remove("is-visible");
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => skillDraftOverlay.classList.add("is-visible"));
+  });
 }
 
 function renderSkillDraftButtons(offerIds: string[]) {
@@ -190,6 +211,10 @@ function syncSkillDraftModal() {
     return;
   }
 
+  if (!isSkillDraftPickPhase()) {
+    return;
+  }
+
   const floor = me?.realmFloor ?? instantDraftRealm?.realmFloor ?? 1;
   const layer = me?.qiLayer ?? instantDraftRealm?.qiLayer ?? 1;
   const offersKey = offers.join("\0");
@@ -201,10 +226,7 @@ function syncSkillDraftModal() {
   if (!frozenDraftSubtitle) {
     freezeDraftSubtitle(floor, layer);
   }
-  if (getDraftDeadlineMs() <= 0 && awaiting) {
-    instantDraftDeadlineMs = Date.now() + SKILL_DRAFT_PICK_TIMEOUT_MS;
-  }
-  skillDraftOverlay.classList.remove("hidden");
+  revealSkillDraftModal();
   if (!draftCountdownTimer) {
     startDraftCountdown();
   }
@@ -222,6 +244,12 @@ function wireSkillDraftListeners(activeRoom: Room<XianState>) {
       updateHud();
     });
     $(player).listen("draftOfferIds", () => syncSkillDraftModal());
+    $(player).listen("draftDeadlineMs", () => {
+      if ((player.draftDeadlineMs as number) > 0) {
+        skillDraftPickPhaseOpen = true;
+      }
+      syncSkillDraftModal();
+    });
     $(player).listen("ownedSkillIds", () => updateHud());
   };
 
@@ -333,6 +361,27 @@ async function joinGame() {
     hud.classList.remove("hidden");
 
     room.onMessage(
+      "skillDraftCelebrate",
+      (msg: {
+        offerIds: string[];
+        realmFloor: number;
+        qiLayer: number;
+        celebrateMs?: number;
+      }) => {
+        instantDraftOffers = msg.offerIds ?? [];
+        instantDraftRealm = {
+          realmFloor: msg.realmFloor,
+          qiLayer: msg.qiLayer,
+        };
+        instantDraftDeadlineMs = null;
+        skillDraftPickPhaseOpen = false;
+        lastRenderedDraftOffersKey = "";
+        frozenDraftSubtitle = "";
+        stopDraftCountdown();
+        hideSkillDraftModal();
+      },
+    );
+    room.onMessage(
       "skillDraftOpen",
       (msg: {
         offerIds: string[];
@@ -347,6 +396,7 @@ async function joinGame() {
         };
         instantDraftDeadlineMs =
           msg.deadlineMs ?? Date.now() + SKILL_DRAFT_PICK_TIMEOUT_MS;
+        skillDraftPickPhaseOpen = true;
         lastRenderedDraftOffersKey = "";
         frozenDraftSubtitle = "";
         stopDraftCountdown();

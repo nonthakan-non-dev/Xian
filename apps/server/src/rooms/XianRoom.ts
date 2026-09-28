@@ -23,6 +23,7 @@ import {
   rangeForSkillClass,
   pickRandomDraftOffer,
   rollSkillDraft,
+  SKILL_DRAFT_CELEBRATE_MS,
   SKILL_DRAFT_PICK_TIMEOUT_MS,
   resolveBasicAttackDamage,
   resolveBasicAttackRange,
@@ -138,6 +139,10 @@ export class XianRoom extends Room {
   private lastFlyingSwordMs = new Map<string, number>();
   private poisonDecayByKey = new Map<string, PoisonDecayState>();
   private bodyShieldShockwaveAt = new Map<string, number>();
+  private skillDraftCelebrateTimer = new Map<
+    string,
+    { clear: () => void }
+  >();
 
   onCreate() {
     this.maxClients = MAX_PLAYERS;
@@ -230,6 +235,7 @@ export class XianRoom extends Room {
   }
 
   onLeave(client: Client) {
+    this.clearSkillDraftCelebrateTimer(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.lastAttackMs.delete(client.sessionId);
     this.lastSkillMs.delete(client.sessionId);
@@ -302,6 +308,12 @@ export class XianRoom extends Room {
     return m;
   }
 
+  private clearSkillDraftCelebrateTimer(sessionId: string) {
+    const timer = this.skillDraftCelebrateTimer.get(sessionId);
+    timer?.clear();
+    this.skillDraftCelebrateTimer.delete(sessionId);
+  }
+
   private afterRealmPromote(player: Player, sessionId: string) {
     if (player.awaitingSkillDraft) return;
     const pool = getSkillPoolForRealm(player.realmFloor).map((s) => s.id);
@@ -314,6 +326,27 @@ export class XianRoom extends Room {
     }
     player.awaitingSkillDraft = true;
     player.draftOfferIds = formatSkillIds(offers);
+    player.draftDeadlineMs = 0;
+    this.clearSkillDraftCelebrateTimer(sessionId);
+    const client = this.clients.find((c) => c.sessionId === sessionId);
+    client?.send("skillDraftCelebrate", {
+      offerIds: offers,
+      realmFloor: player.realmFloor,
+      qiLayer: player.qiLayer,
+      celebrateMs: SKILL_DRAFT_CELEBRATE_MS,
+    });
+    const delayed = this.clock.setTimeout(() => {
+      this.skillDraftCelebrateTimer.delete(sessionId);
+      this.openSkillDraftPickUi(sessionId);
+    }, SKILL_DRAFT_CELEBRATE_MS);
+    this.skillDraftCelebrateTimer.set(sessionId, delayed);
+  }
+
+  private openSkillDraftPickUi(sessionId: string) {
+    const player = this.state.players.get(sessionId);
+    if (!player?.awaitingSkillDraft) return;
+    const offers = parseSkillIds(player.draftOfferIds);
+    if (offers.length === 0) return;
     const deadlineMs = Date.now() + SKILL_DRAFT_PICK_TIMEOUT_MS;
     player.draftDeadlineMs = deadlineMs;
     const client = this.clients.find((c) => c.sessionId === sessionId);
@@ -376,6 +409,7 @@ export class XianRoom extends Room {
     player.awaitingSkillDraft = result.awaitingSkillDraft;
     player.lastActiveSkillId = result.lastActiveSkillId;
     player.draftDeadlineMs = 0;
+    this.clearSkillDraftCelebrateTimer(sessionId);
     return true;
   }
 
