@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { joystickDeltaToMoveVector } from "./touchControls.js";
+import {
+  joystickDeltaToMoveVector,
+  pointerDeltaToAimVector,
+} from "./touchControls.js";
 
 describe("joystickDeltaToMoveVector", () => {
   const r = 50;
@@ -22,5 +25,16 @@ describe("joystickDeltaToMoveVector", () => {
 
   it("handles zero max radius", () => {
     expect(joystickDeltaToMoveVector(10, 10, 0)).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe("pointerDeltaToAimVector", () => {
+  it("matches move stick math for attack drag", () => {
+    const r = 40;
+    const dx = 30;
+    const dy = -10;
+    expect(pointerDeltaToAimVector(dx, dy, r)).toEqual(
+      joystickDeltaToMoveVector(dx, dy, r),
+    );
   });
 });

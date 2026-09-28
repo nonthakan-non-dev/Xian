@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import type { Room } from "colyseus.js";
 import {
   ACTIVE_SKILL_COOLDOWN_MS,
+  BASIC_ATTACK_COOLDOWN_MS,
   DAMAGE_TELEGRAPH_HOLD_BASIC_MS,
   DAMAGE_TELEGRAPH_HOLD_SKILL_MS,
   DEMON_ZONES,
@@ -29,7 +30,12 @@ import {
   setSkillCooldownBlockedHandler,
 } from "./combatFeedback.js";
 import { playSfx } from "./sfx.js";
-import { getMoveVector, isTouchUiActive } from "./touchControls.js";
+import {
+  getAttackAimVector,
+  getAttackHoldActive,
+  getMoveVector,
+  isTouchUiActive,
+} from "./touchControls.js";
 import {
   applyPlayerColors,
   drawSwordOrbit,
@@ -67,6 +73,7 @@ export class WorldScene extends Phaser.Scene {
   private onDeathMessage?: (payload: { sessionId: string; name: string }) => void;
   private telegraphGfx?: Phaser.GameObjects.Graphics;
   private telegraphClearAt = 0;
+  private lastTouchAttackClientMs = 0;
 
   constructor() {
     super({ key: "WorldScene" });
@@ -320,8 +327,26 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  private touchCombatAimPoint(sessionId: string): { aimX: number; aimY: number } {
+    const origin = this.visualPos(sessionId);
+    const aim = getAttackAimVector();
+    if (aim.x !== 0 || aim.y !== 0) {
+      return {
+        aimX: origin.x + aim.x * 200,
+        aimY: origin.y + aim.y * 200,
+      };
+    }
+    return {
+      aimX: origin.x + this.facing.x * 200,
+      aimY: origin.y + this.facing.y * 200,
+    };
+  }
+
   private skillAimPoint(sessionId: string): { aimX: number; aimY: number } {
     const origin = this.visualPos(sessionId);
+    if (isTouchUiActive()) {
+      return this.touchCombatAimPoint(sessionId);
+    }
     const pw = this.pointerWorld();
     const dist = Phaser.Math.Distance.Between(origin.x, origin.y, pw.x, pw.y);
     if (dist > 12) {
@@ -331,13 +356,6 @@ export class WorldScene extends Phaser.Scene {
       aimX: origin.x + this.facing.x * 200,
       aimY: origin.y + this.facing.y * 200,
     };
-  }
-
-  attackFromUi() {
-    if (!this.room) return;
-    const sid = this.room.sessionId;
-    const { aimX, aimY } = this.skillAimPoint(sid);
-    this.sendAttack(aimX, aimY);
   }
 
   skillFromUi() {
@@ -352,7 +370,10 @@ export class WorldScene extends Phaser.Scene {
     const sid = this.room.sessionId;
     const me = this.room.state.players.get(sid);
     if (!me) return;
-    this.haltMovement();
+    const touchHoldFire = isTouchUiActive() && getAttackHoldActive();
+    if (!touchHoldFire) {
+      this.haltMovement();
+    }
     const origin = this.combatOrigin(sid);
     const owned = parseSkillIds(me.ownedSkillIds);
     this.showDamageTelegraph(
@@ -536,6 +557,22 @@ export class WorldScene extends Phaser.Scene {
         const { aimX, aimY } = this.skillAimPoint(sid);
         this.sendSkill(aimX, aimY);
         combatThisFrame = true;
+      }
+    }
+
+    if (
+      isTouchUiActive() &&
+      getAttackHoldActive() &&
+      !draftLocked &&
+      this.canFight()
+    ) {
+      const sid = this.room.sessionId;
+      if (this.room.state.players.get(sid)) {
+        if (now - this.lastTouchAttackClientMs >= BASIC_ATTACK_COOLDOWN_MS) {
+          const { aimX, aimY } = this.touchCombatAimPoint(sid);
+          this.sendAttack(aimX, aimY);
+          this.lastTouchAttackClientMs = now;
+        }
       }
     }
 

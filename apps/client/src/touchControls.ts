@@ -16,6 +16,16 @@ export function joystickDeltaToMoveVector(
   return { x: nx * magnitude, y: ny * magnitude };
 }
 
+/** Attack-button drag uses the same stick math (test hook). */
+export function pointerDeltaToAimVector(
+  dx: number,
+  dy: number,
+  maxRadius: number,
+  deadZoneRatio = 0.12,
+): { x: number; y: number } {
+  return joystickDeltaToMoveVector(dx, dy, maxRadius, deadZoneRatio);
+}
+
 export function isTouchUiActive(): boolean {
   if (typeof window === "undefined") return false;
   if ("ontouchstart" in window) return true;
@@ -23,19 +33,37 @@ export function isTouchUiActive(): boolean {
 }
 
 export type TouchControlsBridge = {
-  attack: () => void;
   skill: () => void;
 };
 
 let moveVector = { x: 0, y: 0 };
+let attackHoldActive = false;
+let attackAimVector = { x: 0, y: 0 };
+/** Last non-zero drag aim while holding attack (kept after release for skill aim). */
+let lastAttackAimVector = { x: 0, y: 0 };
 let bound = false;
 
 export function getMoveVector(): { x: number; y: number } {
   return moveVector;
 }
 
+export function getAttackHoldActive(): boolean {
+  return attackHoldActive;
+}
+
+/** Current drag aim, or last drag direction if finger is in dead zone / released. */
+export function getAttackAimVector(): { x: number; y: number } {
+  if (attackAimVector.x !== 0 || attackAimVector.y !== 0) {
+    return attackAimVector;
+  }
+  return lastAttackAimVector;
+}
+
 export function unbindTouchControls(): void {
   moveVector = { x: 0, y: 0 };
+  attackHoldActive = false;
+  attackAimVector = { x: 0, y: 0 };
+  lastAttackAimVector = { x: 0, y: 0 };
   bound = false;
 }
 
@@ -65,6 +93,11 @@ export function bindTouchControls(
   const maxRadius = () => {
     const rect = stickZone.getBoundingClientRect();
     return Math.min(rect.width, rect.height) * 0.38;
+  };
+
+  const attackDragRadius = () => {
+    const rect = attackBtn.getBoundingClientRect();
+    return Math.min(rect.width, rect.height) * 0.45;
   };
 
   let pointerId: number | null = null;
@@ -117,11 +150,62 @@ export function bindTouchControls(
   stickZone.addEventListener("pointerup", endStick);
   stickZone.addEventListener("pointercancel", endStick);
 
+  let attackPointerId: number | null = null;
+  let attackOriginX = 0;
+  let attackOriginY = 0;
+
+  const updateAttackAimFromEvent = (e: PointerEvent) => {
+    const dx = e.clientX - attackOriginX;
+    const dy = e.clientY - attackOriginY;
+    const r = attackDragRadius();
+    attackAimVector = pointerDeltaToAimVector(dx, dy, r);
+    if (attackAimVector.x !== 0 || attackAimVector.y !== 0) {
+      lastAttackAimVector = { ...attackAimVector };
+    }
+  };
+
+  const endAttackHold = (e: PointerEvent) => {
+    if (e.pointerId !== attackPointerId) return;
+    try {
+      attackBtn.releasePointerCapture(e.pointerId);
+    } catch {
+      /* already released */
+    }
+    attackPointerId = null;
+    attackHoldActive = false;
+    attackAimVector = { x: 0, y: 0 };
+    attackBtn.classList.remove("touch-btn-attack-active");
+  };
+
+  attackBtn.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (attackPointerId !== null) return;
+      attackPointerId = e.pointerId;
+      attackOriginX = e.clientX;
+      attackOriginY = e.clientY;
+      attackHoldActive = true;
+      attackAimVector = { x: 0, y: 0 };
+      attackBtn.setPointerCapture(e.pointerId);
+      attackBtn.classList.add("touch-btn-attack-active");
+      e.preventDefault();
+    },
+    { passive: false },
+  );
+
+  attackBtn.addEventListener("pointermove", (e) => {
+    if (e.pointerId !== attackPointerId) return;
+    updateAttackAimFromEvent(e);
+    e.preventDefault();
+  });
+
+  attackBtn.addEventListener("pointerup", endAttackHold);
+  attackBtn.addEventListener("pointercancel", endAttackHold);
+
   const onAction = (fn: () => void) => (e: Event) => {
     e.preventDefault();
     fn();
   };
 
-  attackBtn.addEventListener("click", onAction(bridge.attack));
   skillBtn.addEventListener("click", onAction(bridge.skill));
 }

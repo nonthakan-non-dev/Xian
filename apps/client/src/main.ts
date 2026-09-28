@@ -637,10 +637,6 @@ async function joinGame() {
     });
 
     bindTouchControls(touchControlsEl, {
-      attack: () => {
-        const scene = game?.scene.getScene("WorldScene") as WorldScene | undefined;
-        scene?.attackFromUi();
-      },
       skill: () => {
         const scene = game?.scene.getScene("WorldScene") as WorldScene | undefined;
         scene?.skillFromUi();
