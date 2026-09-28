@@ -62,10 +62,18 @@ const sfxMute = document.getElementById("sfx-mute") as HTMLInputElement;
 sfxMute.checked = isSfxMuted();
 sfxMute.addEventListener("change", () => setSfxMuted(sfxMute.checked));
 
-function showToast(message: string) {
+let toastHideTimer = 0;
+
+function showToast(message: string, size: "normal" | "mini" = "normal") {
+  window.clearTimeout(toastHideTimer);
   toast.textContent = message;
-  toast.classList.remove("hidden");
-  window.setTimeout(() => toast.classList.add("hidden"), 3200);
+  toast.classList.remove("hidden", "toast-mini");
+  if (size === "mini") toast.classList.add("toast-mini");
+  const hideMs = size === "mini" ? 1200 : 3200;
+  toastHideTimer = window.setTimeout(() => {
+    toast.classList.add("hidden");
+    toast.classList.remove("toast-mini");
+  }, hideMs);
 }
 
 function syncChallengeBanner() {
@@ -277,7 +285,7 @@ function updateHud() {
 async function joinGame() {
   const name = nameInput.value.trim() || "นักบำเพ็ต";
   joinBtn.disabled = true;
-  setSkillCooldownBlockedHandler(() => showToast("วิชาติดคูลดาว — รอสักครู่"));
+  setSkillCooldownBlockedHandler(() => showToast("ติดคูลดาว", "mini"));
   try {
     const client = new Client(SERVER_URL);
     room = await joinXianRoom(client, SERVER_URL, name);

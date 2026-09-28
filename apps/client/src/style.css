@@ -148,6 +148,19 @@ body {
   display: none;
 }
 
+#toast.toast-mini {
+  top: auto;
+  bottom: 92px;
+  left: 12px;
+  transform: none;
+  padding: 3px 9px;
+  font-size: 0.7rem;
+  border-radius: 6px;
+  background: rgba(12, 14, 18, 0.78);
+  border: 1px solid rgba(255, 180, 120, 0.4);
+  color: #ffccaa;
+}
+
 #challenge-banner {
   position: fixed;
   top: 72px;
