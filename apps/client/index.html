@@ -28,7 +28,13 @@
           spellcheck="false"
           placeholder="http://192.168.x.x:2567"
         />
-        <button id="join-btn" type="button">เข้าโลก</button>
+        <div id="join-form">
+          <button id="join-btn" type="button">เข้าโลก</button>
+        </div>
+        <div id="join-loading" class="join-loading hidden" aria-live="polite">
+          <div class="join-spinner" aria-hidden="true"></div>
+          <p id="join-loading-text">กำลังเชื่อมเซิร์ver…</p>
+        </div>
       </div>
     </div>
     <div id="hud" class="hidden">

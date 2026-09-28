@@ -95,6 +95,46 @@ body {
   font-size: 0.9rem;
 }
 
+.join-loading {
+  padding: 1.25rem 0 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.join-loading.hidden {
+  display: none;
+}
+
+#join-overlay.is-joining .name-row,
+#join-overlay.is-joining .server-url-label,
+#join-overlay.is-joining #server-url-input,
+#join-overlay.is-joining #join-form {
+  display: none;
+}
+
+.join-spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid rgba(122, 176, 255, 0.25);
+  border-top-color: #7ab0ff;
+  animation: join-spin 0.85s linear infinite;
+}
+
+@keyframes join-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#join-loading-text {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #c8daf0;
+}
+
 .panel button {
   width: 100%;
   padding: 0.75rem;

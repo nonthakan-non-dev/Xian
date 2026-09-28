@@ -40,6 +40,8 @@ const serverUrlInput = document.getElementById(
   "server-url-input",
 ) as HTMLInputElement;
 const joinBtn = document.getElementById("join-btn") as HTMLButtonElement;
+const joinLoadingEl = document.getElementById("join-loading")!;
+const joinLoadingText = document.getElementById("join-loading-text")!;
 const randomNameBtn = document.getElementById(
   "random-name-btn",
 ) as HTMLButtonElement;
@@ -470,7 +472,7 @@ async function leaveToLobby() {
   touchControlsEl.classList.add("hidden");
   hud.classList.add("hidden");
   joinOverlay.classList.remove("hidden");
-  joinBtn.disabled = false;
+  setJoinLoading(false);
   lastStatsHtml = "";
   prefillDisplayNameIfEmpty();
 }
@@ -480,22 +482,46 @@ function prefillServerUrlIfEmpty() {
   serverUrlInput.value = storedServerUrlForPage() ?? getDefaultServerUrl();
 }
 
+type JoinLoadingPhase = "connect" | "world";
+
+const JOIN_LOADING_MESSAGES: Record<JoinLoadingPhase, string> = {
+  connect: "กำลังเชื่อมเซิร์ver…",
+  world: "กำลังโหลดโลก…",
+};
+
+function setJoinLoading(active: JoinLoadingPhase | false) {
+  if (active) {
+    joinOverlay.classList.add("is-joining");
+    joinLoadingEl.classList.remove("hidden");
+    joinLoadingText.textContent = JOIN_LOADING_MESSAGES[active];
+    nameInput.disabled = true;
+    serverUrlInput.disabled = true;
+    randomNameBtn.disabled = true;
+    joinBtn.disabled = true;
+    return;
+  }
+  joinOverlay.classList.remove("is-joining");
+  joinLoadingEl.classList.add("hidden");
+  nameInput.disabled = false;
+  serverUrlInput.disabled = false;
+  randomNameBtn.disabled = false;
+  joinBtn.disabled = false;
+}
+
 async function joinGame() {
   const name = nameInput.value.trim() || "นักบำเพ็ต";
   const serverUrl = resolveServerUrl(serverUrlInput.value);
   saveServerUrl(serverUrl);
   serverUrlInput.value = serverUrl;
-  joinBtn.disabled = true;
   hideRunSummaryModal();
   try {
     if (room || game) {
       await leaveToLobby();
     }
+    setJoinLoading("connect");
     const client = new Client(colyseusClientUrl(serverUrl));
     room = await joinXianRoom(client, serverUrl, name);
-    joinOverlay.classList.add("hidden");
-    hud.classList.remove("hidden");
-    syncMobileUiHints();
+    setJoinLoading("world");
 
     room.onMessage(
       "skillDraftCelebrate",
@@ -614,9 +640,14 @@ async function joinGame() {
         scene?.skillFromUi();
       },
     });
+
+    joinOverlay.classList.add("hidden");
+    hud.classList.remove("hidden");
+    syncMobileUiHints();
+    setJoinLoading(false);
   } catch (err) {
     console.error(err);
-    joinBtn.disabled = false;
+    setJoinLoading(false);
     const hint =
       err instanceof Error ? err.message : String(err);
     alert(
