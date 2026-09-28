@@ -14,7 +14,7 @@ import { joinXianRoom } from "./joinRoom.js";
 import { isSfxMuted, setSfxMuted } from "./sfx.js";
 import { WorldScene } from "./WorldScene.js";
 import {
-  clearDraftPickPending,
+  clearDraftUiSettled,
   isDraftPickPending,
   markDraftPickSent,
 } from "./draftUi.js";
@@ -47,6 +47,8 @@ let room: Room<XianState> | null = null;
 /** Instant draft UI before schema patch arrives (no “waiting for server”). */
 let instantDraftOffers: string[] | null = null;
 let instantDraftRealm: { realmFloor: number; qiLayer: number } | null = null;
+/** กัน onStateChange ทุก tick สร้างปุ่มใหม่จนกดไม่ติด */
+let lastRenderedDraftOffersKey = "";
 
 const sfxMute = document.getElementById("sfx-mute") as HTMLInputElement;
 sfxMute.checked = isSfxMuted();
@@ -88,6 +90,7 @@ function clearInstantDraftCache() {
 function hideSkillDraftModal() {
   skillDraftOverlay.classList.add("hidden");
   skillDraftOptions.innerHTML = "";
+  lastRenderedDraftOffersKey = "";
 }
 
 function renderSkillDraftButtons(offerIds: string[]) {
@@ -143,7 +146,11 @@ function syncSkillDraftModal() {
   const floor = me?.realmFloor ?? instantDraftRealm?.realmFloor ?? 1;
   const layer = me?.qiLayer ?? instantDraftRealm?.qiLayer ?? 1;
   skillDraftSubtitle.textContent = `ขั้น ${realmDisplayName(floor, layer)} — เลือกหนึ่งในสาม`;
-  renderSkillDraftButtons(offers);
+  const offersKey = offers.join("\0");
+  if (offersKey !== lastRenderedDraftOffersKey) {
+    renderSkillDraftButtons(offers);
+    lastRenderedDraftOffersKey = offersKey;
+  }
   skillDraftOverlay.classList.remove("hidden");
 }
 
@@ -154,7 +161,7 @@ function wireSkillDraftListeners(activeRoom: Room<XianState>) {
   const bindPlayer = (player: Player, sessionId: string) => {
     if (sessionId !== activeRoom.sessionId) return;
     $(player).listen("awaitingSkillDraft", (value: boolean) => {
-      if (!value) clearDraftPickPending();
+      if (!value) clearDraftUiSettled();
       syncSkillDraftModal();
       updateHud();
     });
@@ -265,13 +272,13 @@ async function joinGame() {
       },
     );
     room.onMessage("skillDraftComplete", () => {
-      clearDraftPickPending();
+      markDraftPickSent();
       hideSkillDraftModal();
       clearInstantDraftCache();
       updateHud();
     });
     room.onMessage("skillDraftRejected", () => {
-      clearDraftPickPending();
+      clearDraftUiSettled();
       showToast("เลือกวิชาไม่สำเร็จ — ลองอีกครั้ง");
       syncSkillDraftModal();
     });

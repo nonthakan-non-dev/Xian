@@ -1,26 +1,28 @@
-/** Client-only: หลังกดเลือกวิชา ไม่ล็อกเกม/ไม่เปิด modal ซ้ำจน server ยืนยัน */
+/** Client-only: หลังกดเลือกวิชา — ไม่ล็อกเกม/ไม่เปิด modal จน schema ว่า awaitingSkillDraft=false */
 
-let draftPickPending = false;
+/** กดส่ง pick แล้ว (หรือได้ skillDraftComplete) แต่ schema อาจยัง lag */
+let draftUiSettled = false;
 
 export function markDraftPickSent(): void {
-  draftPickPending = true;
+  draftUiSettled = true;
 }
 
-export function clearDraftPickPending(): void {
-  draftPickPending = false;
+export function clearDraftUiSettled(): void {
+  draftUiSettled = false;
 }
 
+/** อย่าเปิด modal ซ้ำ / อย่ารับ click ซ้ำ */
 export function isDraftPickPending(): boolean {
-  return draftPickPending;
+  return draftUiSettled;
 }
 
-/** true = ยังต้อง block เดิน/ต่อสู้ หรือแสดง modal */
+/** true = ยังต้อง block เดิน/ต่อสู้ */
 export function isPlayerBlockedBySkillDraft(
   awaitingSkillDraft: boolean,
 ): boolean {
   if (!awaitingSkillDraft) {
-    draftPickPending = false;
+    draftUiSettled = false;
     return false;
   }
-  return !draftPickPending;
+  return !draftUiSettled;
 }
