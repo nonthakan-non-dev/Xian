@@ -75,6 +75,8 @@ export class WorldScene extends Phaser.Scene {
   create() {
     if (!this.room) return;
 
+    this.input.mouse?.disableContextMenu();
+
     this.cameras.main.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
     const g = this.add.graphics();

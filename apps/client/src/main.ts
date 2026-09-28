@@ -286,6 +286,9 @@ async function joinGame() {
       },
     });
     game.scene.add("WorldScene", WorldScene, false);
+    const gameRoot = document.getElementById("game");
+    gameRoot?.addEventListener("contextmenu", (e) => e.preventDefault());
+
     game.scene.start("WorldScene", {
       room,
       onDeathMessage: (msg: { sessionId: string; name: string }) => {
