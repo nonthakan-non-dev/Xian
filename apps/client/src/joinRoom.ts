@@ -1,7 +1,7 @@
 import "./colyseus018JoinPatch.js";
 import { Client, Room } from "colyseus.js";
 import { XianState } from "@xian/shared";
-import { matchmakeBase, probeServerHealth } from "./serverUrl.js";
+import { fetchWithTimeout, matchmakeBase } from "./serverUrl.js";
 
 /** Matchmake via fetch (proxy in dev) then join with schema decoder. */
 export async function joinXianRoom(
@@ -9,12 +9,10 @@ export async function joinXianRoom(
   serverUrl: string,
   name: string,
 ): Promise<Room<XianState>> {
-  await probeServerHealth(serverUrl);
-
   const base = matchmakeBase(serverUrl);
   let res: Response;
   try {
-    res = await fetch(`${base}/matchmake/joinOrCreate/xian`, {
+    res = await fetchWithTimeout(`${base}/matchmake/joinOrCreate/xian`, {
       method: "POST",
       mode: "cors",
       credentials: "omit",
@@ -24,7 +22,10 @@ export async function joinXianRoom(
       },
       body: JSON.stringify({ name }),
     });
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("หมดเวลา")) {
+      throw e;
+    }
     throw new Error(
       `matchmake ไม่ถึง ${base} — ถ้าเป็นมือถือ/LAN ให้เปิด client ที่ http://<IP-PC>:5173 และใส่เซิร์ver http://<IP-PC>:2567 (จะ relay ผ่าน Vite ในโหมด dev)`,
     );

@@ -1,5 +1,30 @@
 const STORAGE_KEY = "xian-server-url";
 
+/** LAN/mobile: fail fast instead of browser TCP hang. */
+export const JOIN_FETCH_TIMEOUT_MS = 8_000;
+
+export async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = JOIN_FETCH_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      const sec = Math.round(timeoutMs / 1000);
+      throw new Error(
+        `หมดเวลา ${sec} วิ — ตรวจ URL เซิร์ver และว่ามือถือเข้า :2567 ได้ (อย่าใช้ localhost บนมือถือ)`,
+      );
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function normalizeServerUrl(raw: string): string {
   return raw.trim().replace(/\/$/, "");
 }
@@ -96,11 +121,14 @@ export async function probeServerHealth(serverUrl: string): Promise<void> {
   const base = normalizeServerUrl(serverUrl);
   let res: Response;
   try {
-    res = await fetch(`${base}/health`, {
+    res = await fetchWithTimeout(`${base}/health`, {
       method: "GET",
       headers: { Accept: "application/json" },
     });
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("หมดเวลา")) {
+      throw e;
+    }
     throw new Error(
       `เข้า ${base}/health ไม่ได้ — รัน pnpm dev ให้เห็น Colyseus listening; มือถือ/LAN ต้องเข้า IP นี้ได้ (macOS: System Settings → Firewall)`,
     );

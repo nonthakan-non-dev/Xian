@@ -469,9 +469,8 @@ async function leaveToLobby() {
       /* already left */
     }
   }
-  if (game) {
-    game.destroy(true);
-    game = null;
+  if (game?.scene.isActive("WorldScene")) {
+    game.scene.stop("WorldScene");
   }
   unbindTouchControls();
   touchControlsEl.classList.add("hidden");
@@ -487,18 +486,35 @@ function prefillServerUrlIfEmpty() {
   serverUrlInput.value = storedServerUrlForPage() ?? getDefaultServerUrl();
 }
 
-type JoinLoadingPhase = "connect" | "world";
+const JOIN_LOADING_MESSAGE = "กำลังโหลดโลก";
 
-const JOIN_LOADING_MESSAGES: Record<JoinLoadingPhase, string> = {
-  connect: "กำลังเชื่อมเซิร์ver…",
-  world: "กำลังโหลดโลก…",
-};
+function ensureGameEngine(): Phaser.Game {
+  if (game) return game;
+  game = new Phaser.Game({
+    type: Phaser.AUTO,
+    parent: "game",
+    width: window.innerWidth,
+    height: window.innerHeight,
+    backgroundColor: "#0d1a12",
+    scale: {
+      mode: Phaser.Scale.RESIZE,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+    },
+  });
+  game.scene.add("WorldScene", WorldScene, false);
+  const gameRoot = document.getElementById("game");
+  if (gameRoot && !gameRoot.dataset.contextMenuBound) {
+    gameRoot.dataset.contextMenuBound = "1";
+    gameRoot.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
+  return game;
+}
 
-function setJoinLoading(active: JoinLoadingPhase | false) {
+function setJoinLoading(active: boolean) {
   if (active) {
     joinOverlay.classList.add("is-joining");
     joinLoadingEl.classList.remove("hidden");
-    joinLoadingText.textContent = JOIN_LOADING_MESSAGES[active];
+    joinLoadingText.textContent = JOIN_LOADING_MESSAGE;
     nameInput.disabled = true;
     serverUrlInput.disabled = true;
     randomNameBtn.disabled = true;
@@ -523,11 +539,12 @@ async function joinGame() {
     if (room || game) {
       await leaveToLobby();
     }
-    setJoinLoading("connect");
+    setJoinLoading(true);
     void requestLandscapeLock();
     const client = new Client(colyseusClientUrl(serverUrl));
+    const engineReady = Promise.resolve().then(() => ensureGameEngine());
     room = await joinXianRoom(client, serverUrl, name);
-    setJoinLoading("world");
+    await engineReady;
 
     room.onMessage(
       "skillDraftCelebrate",
@@ -613,22 +630,7 @@ async function joinGame() {
     startSkillCooldownHudLoop();
     syncSkillDraftModal();
 
-    game = new Phaser.Game({
-      type: Phaser.AUTO,
-      parent: "game",
-      width: window.innerWidth,
-      height: window.innerHeight,
-      backgroundColor: "#0d1a12",
-      scale: {
-        mode: Phaser.Scale.RESIZE,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
-      },
-    });
-    game.scene.add("WorldScene", WorldScene, false);
-    const gameRoot = document.getElementById("game");
-    gameRoot?.addEventListener("contextmenu", (e) => e.preventDefault());
-
-    game.scene.start("WorldScene", {
+    ensureGameEngine().scene.start("WorldScene", {
       room,
       onDeathMessage: (msg: { sessionId: string; name: string }) => {
         if (msg.sessionId === room!.sessionId) return;
