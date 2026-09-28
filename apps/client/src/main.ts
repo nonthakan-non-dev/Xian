@@ -32,14 +32,6 @@ const statsEl = document.getElementById("stats")!;
 const leaderboardList = document.getElementById(
   "leaderboard-list",
 )! as HTMLOListElement;
-const challengeBanner = document.getElementById("challenge-banner")!;
-const challengeText = document.getElementById("challenge-text")!;
-const challengeAccept = document.getElementById(
-  "challenge-accept",
-)! as HTMLButtonElement;
-const challengeDecline = document.getElementById(
-  "challenge-decline",
-)! as HTMLButtonElement;
 const toast = document.getElementById("toast")!;
 const skillDraftOverlay = document.getElementById("skill-draft-overlay")!;
 const skillDraftOptions = document.getElementById("skill-draft-options")!;
@@ -80,28 +72,6 @@ function showToast(message: string, size: "normal" | "mini" = "normal") {
     toast.classList.remove("toast-mini");
   }, hideMs);
 }
-
-function syncChallengeBanner() {
-  if (!room) return;
-  const me = room.state.players.get(room.sessionId);
-  if (me?.challengeFrom) {
-    const from = room.state.players.get(me.challengeFrom);
-    challengeText.textContent = `${from?.name ?? "นักบำเพ็ต"} ขอท้าดวล PocketDuel`;
-    challengeBanner.classList.remove("hidden");
-  } else {
-    challengeBanner.classList.add("hidden");
-  }
-}
-
-challengeAccept.addEventListener("click", () => {
-  room?.send("acceptChallenge", {});
-  challengeBanner.classList.add("hidden");
-});
-
-challengeDecline.addEventListener("click", () => {
-  room?.send("declineChallenge", {});
-  challengeBanner.classList.add("hidden");
-});
 
 function clearInstantDraftCache() {
   instantDraftOffers = null;
@@ -329,11 +299,9 @@ function updateHud() {
       100,
       Math.round((me.vassana / VASSANA_CAP) * 100),
     );
-    const duelHint = me.inPocketDuel
-      ? "<br/><em>⚔ PocketDuel</em>"
-      : isInDuelZone(me.x, me.y)
-        ? "<br/><em>วงดวล FFA</em>"
-        : "";
+    const duelHint = isInDuelZone(me.x, me.y)
+      ? "<br/><em>วงดวล FFA</em>"
+      : "";
     const skillLine =
       owned.length > 0
         ? `<br/>วิชา: ${owned.length} · Shift: ${getSkillById(me.lastActiveSkillId)?.nameTh ?? "—"}`
@@ -368,37 +336,6 @@ async function joinGame() {
     joinOverlay.classList.add("hidden");
     hud.classList.remove("hidden");
 
-    room.onMessage(
-      "challengeReceived",
-      (msg: { fromName: string }) => {
-        showToast(`${msg.fromName} ขอท้าดวล — กดยอมด้านบน`);
-        syncChallengeBanner();
-      },
-    );
-    room.onMessage(
-      "challengeRejected",
-      (msg: { reason: string }) => {
-        const text =
-          msg.reason === "in_duel_zone"
-            ? "ท้าดวลไม่ได้ในวงดวล"
-            : "ท้าดวลไม่ได้ตอนนี้";
-        showToast(text);
-      },
-    );
-    room.onMessage(
-      "pocketDuelStart",
-      (msg: { aName: string; bName: string }) => {
-        showToast(`PocketDuel: ${msg.aName} vs ${msg.bName}`);
-      },
-    );
-    room.onMessage(
-      "pocketDuelEnd",
-      (msg: { winnerName: string; loserName: string; transfer: number }) => {
-        showToast(
-          `${msg.winnerName} ชนะ — ได้ ${msg.transfer} พลังจาก ${msg.loserName}`,
-        );
-      },
-    );
     room.onMessage(
       "skillDraftOpen",
       (msg: {
@@ -450,13 +387,11 @@ async function joinGame() {
     room.onStateChange(() => {
       updateHud();
       syncSkillDraftModal();
-      syncChallengeBanner();
     });
     updateHud();
     updateSkillCooldownHud();
     startSkillCooldownHudLoop();
     syncSkillDraftModal();
-    syncChallengeBanner();
 
     const game = new Phaser.Game({
       type: Phaser.AUTO,

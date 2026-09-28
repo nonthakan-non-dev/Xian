@@ -8,7 +8,6 @@ import {
   DUEL_ZONES,
   getSkillById,
   isInAnyDemonZone,
-  isInDuelZone,
   MAP_HEIGHT,
   MAP_WIDTH,
   parseSkillIds,
@@ -63,7 +62,6 @@ export class WorldScene extends Phaser.Scene {
   private facing = { x: 1, y: 0 };
   private spaceKey?: Phaser.Input.Keyboard.Key;
   private shiftKey?: Phaser.Input.Keyboard.Key;
-  private challengeKey?: Phaser.Input.Keyboard.Key;
   private herbSprites = new Map<string, Phaser.GameObjects.Rectangle>();
   private onDeathMessage?: (payload: { sessionId: string; name: string }) => void;
   private telegraphGfx?: Phaser.GameObjects.Graphics;
@@ -126,9 +124,6 @@ export class WorldScene extends Phaser.Scene {
       );
       this.shiftKey = this.input.keyboard.addKey(
         Phaser.Input.Keyboard.KeyCodes.SHIFT,
-      );
-      this.challengeKey = this.input.keyboard.addKey(
-        Phaser.Input.Keyboard.KeyCodes.C,
       );
     }
 
@@ -231,28 +226,6 @@ export class WorldScene extends Phaser.Scene {
       ease: "Cubic.easeOut",
       onComplete: () => text.destroy(),
     });
-  }
-
-  private sendChallengeToNearest() {
-    if (!this.room) return;
-    const me = this.room.state.players.get(this.room.sessionId);
-    if (!me || me.inPocketDuel || isInDuelZone(me.x, me.y)) return;
-
-    let bestId: string | undefined;
-    let bestDist = 280;
-    for (const [id, p] of this.room.state.players) {
-      if (id === this.room.sessionId || p.currentQi <= 0 || p.inPocketDuel) {
-        continue;
-      }
-      const d = Phaser.Math.Distance.Between(me.x, me.y, p.x, p.y);
-      if (d < bestDist) {
-        bestDist = d;
-        bestId = id;
-      }
-    }
-    if (bestId) {
-      this.room.send("challenge", { targetId: bestId });
-    }
   }
 
   private canFight(): boolean {
@@ -516,10 +489,6 @@ export class WorldScene extends Phaser.Scene {
       this.lastInput = { x: ix, y: iy };
       this.room.send("input", { x: ix, y: iy });
       this.inputResendAt = now;
-    }
-
-    if (this.challengeKey && Phaser.Input.Keyboard.JustDown(this.challengeKey)) {
-      this.sendChallengeToNearest();
     }
 
     this.updateDemonZoneHighlight();

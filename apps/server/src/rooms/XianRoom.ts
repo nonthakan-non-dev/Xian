@@ -81,18 +81,9 @@ import {
   maxQiForRealm,
   tickVassana,
   TICK_RATE_MS,
-  canEngagePvP,
   isInDuelZone,
-  isMutualChallenge,
-  tryStartChallenge,
 } from "@xian/shared";
 import { Demon, Herb, Orb, Player, XianState } from "../schema.js";
-import {
-  applyPocketStart,
-  applyPocketEnd,
-  clearChallengeState,
-  initDuelFields,
-} from "./duelLogic.js";
 
 let orbCounter = 0;
 let demonCounter = 0;
@@ -184,21 +175,6 @@ export class XianRoom extends Room {
     );
 
     this.onMessage(
-      "challenge",
-      (client, data: { targetId?: string }) => {
-        this.handleChallenge(client.sessionId, String(data.targetId ?? ""));
-      },
-    );
-
-    this.onMessage("acceptChallenge", (client) => {
-      this.handleAcceptChallenge(client.sessionId);
-    });
-
-    this.onMessage("declineChallenge", (client) => {
-      this.handleDeclineChallenge(client.sessionId);
-    });
-
-    this.onMessage(
       "pickSkillDraft",
       (client, data: { skillId?: string }) => {
         const ok = this.handlePickSkillDraft(
@@ -251,155 +227,18 @@ export class XianRoom extends Room {
     player.shieldUntil = 0;
     player.herbBuffUntil = 0;
     player.lastDamagedAt = 0;
-    initDuelFields(player);
     this.state.players.set(client.sessionId, player);
   }
 
   onLeave(client: Client) {
-    const player = this.state.players.get(client.sessionId);
-    if (player?.inPocketDuel) {
-      const opp = this.state.players.get(player.pocketOpponentId);
-      if (opp) {
-        this.finishPocketDuel(opp, player, player.currentQi);
-      }
-    }
-    this.clearChallengesInvolving(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.lastAttackMs.delete(client.sessionId);
     this.lastSkillMs.delete(client.sessionId);
     this.lastFlyingSwordMs.delete(client.sessionId);
   }
 
-  private clearChallengesInvolving(sessionId: string) {
-    for (const p of this.state.players.values()) {
-      if (p.challengeTo === sessionId) {
-        p.challengeTo = "";
-      }
-      if (p.challengeFrom === sessionId) {
-        p.challengeFrom = "";
-      }
-    }
-  }
-
-  private validateChallengePair(
-    challenger: Player,
-    target: Player,
-  ): { ok: true } | { ok: false; reason: string } {
-    const gate = tryStartChallenge({
-      challengerInDuelZone: isInDuelZone(challenger.x, challenger.y),
-      targetInDuelZone: isInDuelZone(target.x, target.y),
-      challengerInPocket: challenger.inPocketDuel,
-      targetInPocket: target.inPocketDuel,
-    });
-    if (!gate.ok) return gate;
-    if (challenger.currentQi <= 0 || target.currentQi <= 0) {
-      return { ok: false, reason: "invalid" };
-    }
-    return { ok: true };
-  }
-
-  private handleChallenge(challengerId: string, targetId: string) {
-    if (!targetId || challengerId === targetId) return;
-    const challenger = this.state.players.get(challengerId);
-    const target = this.state.players.get(targetId);
-    if (!challenger || !target) return;
-
-    const gate = this.validateChallengePair(challenger, target);
-    if (!gate.ok) {
-      const client = this.clients.find((c) => c.sessionId === challengerId);
-      client?.send("challengeRejected", { reason: gate.reason });
-      return;
-    }
-
-    if (isMutualChallenge(challengerId, target.challengeTo)) {
-      this.startPocketDuel(challenger, target);
-      return;
-    }
-
-    challenger.challengeTo = targetId;
-    target.challengeFrom = challengerId;
-    const targetClient = this.clients.find((c) => c.sessionId === targetId);
-    targetClient?.send("challengeReceived", {
-      fromId: challengerId,
-      fromName: challenger.name,
-    });
-  }
-
-  private handleAcceptChallenge(accepterId: string) {
-    const accepter = this.state.players.get(accepterId);
-    if (!accepter?.challengeFrom) return;
-    const challenger = this.state.players.get(accepter.challengeFrom);
-    if (!challenger) {
-      accepter.challengeFrom = "";
-      return;
-    }
-    const gate = this.validateChallengePair(challenger, accepter);
-    if (!gate.ok) {
-      clearChallengeState(challenger);
-      clearChallengeState(accepter);
-      const client = this.clients.find((c) => c.sessionId === accepterId);
-      client?.send("challengeRejected", { reason: gate.reason });
-      return;
-    }
-    this.startPocketDuel(challenger, accepter);
-  }
-
-  private handleDeclineChallenge(accepterId: string) {
-    const accepter = this.state.players.get(accepterId);
-    if (!accepter?.challengeFrom) return;
-    const fromId = accepter.challengeFrom;
-    const challenger = this.state.players.get(fromId);
-    if (challenger?.challengeTo === accepterId) {
-      challenger.challengeTo = "";
-    }
-    accepter.challengeFrom = "";
-  }
-
-  private startPocketDuel(a: Player, b: Player) {
-    applyPocketStart(a, b);
-    this.broadcast("pocketDuelStart", {
-      aName: a.name,
-      bName: b.name,
-    });
-  }
-
-  private finishPocketDuel(
-    winner: Player,
-    loser: Player,
-    loserQiBeforeZero: number,
-  ) {
-    const transfer = applyPocketEnd(
-      winner,
-      loser,
-      loserQiBeforeZero,
-      RESPAWN_QI,
-    );
-    this.clearPoisonPlayer(loser.sessionId, loser);
-    loser.overloadStacks = 0;
-    this.bodyShieldShockwaveAt.delete(loser.sessionId);
-    loser.stunUntil = 0;
-    loser.slowUntil = 0;
-    loser.shieldUntil = 0;
-    this.broadcast("pocketDuelEnd", {
-      winnerName: winner.name,
-      loserName: loser.name,
-      transfer,
-    });
-  }
-
-  private playersCanFight(a: Player, b: Player): boolean {
-    return canEngagePvP(
-      {
-        inPocketDuel: a.inPocketDuel,
-        pocketOpponentId: a.pocketOpponentId,
-        sessionId: a.sessionId,
-      },
-      {
-        inPocketDuel: b.inPocketDuel,
-        pocketOpponentId: b.pocketOpponentId,
-        sessionId: b.sessionId,
-      },
-    );
+  private playersCanFight(_a: Player, _b: Player): boolean {
+    return true;
   }
 
   private nowMs(): number {
@@ -690,7 +529,7 @@ export class XianRoom extends Room {
       | undefined;
 
     for (const [id, p] of this.state.players) {
-      if (id === excludeSessionId || p.currentQi <= 0 || p.inPocketDuel) {
+      if (id === excludeSessionId || p.currentQi <= 0) {
         continue;
       }
       const d = distPoint(x, y, p.x, p.y);
@@ -1335,17 +1174,6 @@ export class XianRoom extends Room {
     qiBeforeDeath: number,
     killer: Player | undefined,
   ) {
-    if (player.inPocketDuel && killer) {
-      this.finishPocketDuel(killer, player, qiBeforeDeath);
-      return;
-    }
-    if (player.inPocketDuel) {
-      const opp = this.state.players.get(player.pocketOpponentId);
-      if (opp) {
-        this.finishPocketDuel(opp, player, qiBeforeDeath);
-      }
-      return;
-    }
     this.killPlayer(player, sessionId, qiBeforeDeath);
   }
 
@@ -1389,7 +1217,7 @@ export class XianRoom extends Room {
       nearestPlayer = undefined;
       nearestDist = Infinity;
       for (const player of this.state.players.values()) {
-        if (player.currentQi <= 0 || player.inPocketDuel) continue;
+        if (player.currentQi <= 0) continue;
         const dist = Math.hypot(player.x - demon.x, player.y - demon.y);
         if (dist < nearestDist) {
           nearestDist = dist;
