@@ -20,13 +20,24 @@ import {
   markDraftPickSent,
 } from "./draftUi.js";
 import { clientSkillCooldownForPlayer } from "./clientSkillCooldown.js";
-
-const SERVER_URL =
-  import.meta.env.VITE_SERVER_URL ?? "http://localhost:2567";
+import {
+  getDefaultServerUrl,
+  loadStoredServerUrl,
+  resolveServerUrl,
+  saveServerUrl,
+} from "./serverUrl.js";
+import {
+  bindTouchControls,
+  isTouchUiActive,
+  unbindTouchControls,
+} from "./touchControls.js";
 
 const joinOverlay = document.getElementById("join-overlay")!;
 const hud = document.getElementById("hud")!;
 const nameInput = document.getElementById("name-input") as HTMLInputElement;
+const serverUrlInput = document.getElementById(
+  "server-url-input",
+) as HTMLInputElement;
 const joinBtn = document.getElementById("join-btn") as HTMLButtonElement;
 const randomNameBtn = document.getElementById(
   "random-name-btn",
@@ -36,6 +47,9 @@ const leaderboardList = document.getElementById(
   "leaderboard-list",
 )! as HTMLOListElement;
 const toast = document.getElementById("toast")!;
+const touchControlsEl = document.getElementById("touch-controls")!;
+const hintDesktop = document.querySelector(".hint-desktop") as HTMLElement | null;
+const hintMobile = document.querySelector(".hint-mobile") as HTMLElement | null;
 const skillDraftOverlay = document.getElementById("skill-draft-overlay")!;
 const skillDraftOptions = document.getElementById("skill-draft-options")!;
 const skillDraftSubtitle = document.getElementById("skill-draft-subtitle")!;
@@ -424,6 +438,14 @@ function updateHud() {
     .join("");
 }
 
+function syncMobileUiHints() {
+  const touch = isTouchUiActive();
+  touchControlsEl.classList.toggle("hidden", !touch);
+  touchControlsEl.setAttribute("aria-hidden", touch ? "false" : "true");
+  hintDesktop?.classList.toggle("hidden", touch);
+  hintMobile?.classList.toggle("hidden", !touch);
+}
+
 async function leaveToLobby() {
   hideRunSummaryModal();
   hideSkillDraftModal();
@@ -443,6 +465,8 @@ async function leaveToLobby() {
     game.destroy(true);
     game = null;
   }
+  unbindTouchControls();
+  touchControlsEl.classList.add("hidden");
   hud.classList.add("hidden");
   joinOverlay.classList.remove("hidden");
   joinBtn.disabled = false;
@@ -450,18 +474,27 @@ async function leaveToLobby() {
   prefillDisplayNameIfEmpty();
 }
 
+function prefillServerUrlIfEmpty() {
+  if (serverUrlInput.value.trim()) return;
+  serverUrlInput.value = loadStoredServerUrl() ?? getDefaultServerUrl();
+}
+
 async function joinGame() {
   const name = nameInput.value.trim() || "นักบำเพ็ต";
+  const serverUrl = resolveServerUrl(serverUrlInput.value);
+  saveServerUrl(serverUrl);
+  serverUrlInput.value = serverUrl;
   joinBtn.disabled = true;
   hideRunSummaryModal();
   try {
     if (room || game) {
       await leaveToLobby();
     }
-    const client = new Client(SERVER_URL);
-    room = await joinXianRoom(client, SERVER_URL, name);
+    const client = new Client(serverUrl);
+    room = await joinXianRoom(client, serverUrl, name);
     joinOverlay.classList.add("hidden");
     hud.classList.remove("hidden");
+    syncMobileUiHints();
 
     room.onMessage(
       "skillDraftCelebrate",
@@ -569,13 +602,24 @@ async function joinGame() {
         showToast(`${msg.name} ล้ม — ลมปราณกระจาย`);
       },
     });
+
+    bindTouchControls(touchControlsEl, {
+      attack: () => {
+        const scene = game?.scene.getScene("WorldScene") as WorldScene | undefined;
+        scene?.attackFromUi();
+      },
+      skill: () => {
+        const scene = game?.scene.getScene("WorldScene") as WorldScene | undefined;
+        scene?.skillFromUi();
+      },
+    });
   } catch (err) {
     console.error(err);
     joinBtn.disabled = false;
     const hint =
       err instanceof Error ? err.message : String(err);
     alert(
-      `เชื่อมต่อเซิร์ver ไม่ได้\n\nWS/API: ${SERVER_URL}\n${hint}\n\n1) รัน pnpm dev:clean จาก root\n2) ต้องเห็น "[xian] Colyseus listening" ไม่มี EADDRINUSE\n3) Hard refresh หน้าเบราว์เซอร์`,
+      `เชื่อมต่อเซิร์ver ไม่ได้\n\nWS/API: ${serverUrl}\n${hint}\n\n1) รัน pnpm dev:clean จาก root\n2) มือถือ/LAN: ใส่ http://<IP-เครื่องที่รัน server>:2567\n3) ต้องเห็น "[xian] Colyseus listening" ไม่มี EADDRINUSE\n4) Hard refresh หน้าเบราว์เซอร์`,
     );
   }
 }
@@ -600,3 +644,5 @@ runSummaryRestartBtn.addEventListener("click", () => {
 });
 
 prefillDisplayNameIfEmpty();
+prefillServerUrlIfEmpty();
+syncMobileUiHints();

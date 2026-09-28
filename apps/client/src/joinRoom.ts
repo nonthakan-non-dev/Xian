@@ -1,13 +1,7 @@
 import "./colyseus018JoinPatch.js";
 import { Client, Room } from "colyseus.js";
 import { XianState } from "@xian/shared";
-
-function matchmakeBase(serverUrl: string): string {
-  if (import.meta.env.DEV && !import.meta.env.VITE_SERVER_URL) {
-    return window.location.origin;
-  }
-  return serverUrl.replace(/\/$/, "");
-}
+import { matchmakeBase } from "./serverUrl.js";
 
 /** Matchmake via fetch (proxy in dev) then join with schema decoder. */
 export async function joinXianRoom(

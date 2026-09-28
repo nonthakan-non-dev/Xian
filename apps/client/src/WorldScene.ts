@@ -29,6 +29,7 @@ import {
   setSkillCooldownBlockedHandler,
 } from "./combatFeedback.js";
 import { playSfx } from "./sfx.js";
+import { getMoveVector, isTouchUiActive } from "./touchControls.js";
 import {
   applyPlayerColors,
   drawSwordOrbit,
@@ -121,6 +122,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (isTouchUiActive()) return;
       const { x, y } = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       if (pointer.rightButtonDown()) {
         this.sendSkill(x, y);
@@ -331,6 +333,20 @@ export class WorldScene extends Phaser.Scene {
     };
   }
 
+  attackFromUi() {
+    if (!this.room) return;
+    const sid = this.room.sessionId;
+    const { aimX, aimY } = this.skillAimPoint(sid);
+    this.sendAttack(aimX, aimY);
+  }
+
+  skillFromUi() {
+    if (!this.room) return;
+    const sid = this.room.sessionId;
+    const { aimX, aimY } = this.skillAimPoint(sid);
+    this.sendSkill(aimX, aimY);
+  }
+
   private sendAttack(worldX: number, worldY: number) {
     if (!this.room || !this.canFight()) return;
     const sid = this.room.sessionId;
@@ -485,6 +501,12 @@ export class WorldScene extends Phaser.Scene {
     if (this.cursors?.right.isDown || this.wasd?.D.isDown) ix += 1;
     if (this.cursors?.up.isDown || this.wasd?.W.isDown) iy -= 1;
     if (this.cursors?.down.isDown || this.wasd?.S.isDown) iy += 1;
+
+    const touch = getMoveVector();
+    if (touch.x !== 0 || touch.y !== 0) {
+      ix = touch.x;
+      iy = touch.y;
+    }
 
     if (ix !== 0 || iy !== 0) {
       const len = Math.hypot(ix, iy);

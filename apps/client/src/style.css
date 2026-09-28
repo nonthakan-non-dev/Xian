@@ -13,6 +13,7 @@ body {
 #game {
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
 }
 
 #game canvas {
@@ -78,6 +79,20 @@ body {
   background: #0d1520;
   color: inherit;
   font-size: 1rem;
+}
+
+.server-url-label {
+  display: block;
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.85rem;
+  opacity: 0.85;
+  text-align: left;
+}
+
+#server-url-input {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
 }
 
 .panel button {
@@ -474,4 +489,117 @@ body {
 .skill-draft-btn span {
   font-size: 0.85rem;
   opacity: 0.85;
+}
+
+.touch-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  padding:
+    env(safe-area-inset-top, 0)
+    env(safe-area-inset-right, 0)
+    env(safe-area-inset-bottom, 0)
+    env(safe-area-inset-left, 0);
+}
+
+.touch-controls.hidden {
+  display: none;
+}
+
+.touch-joystick {
+  position: absolute;
+  left: max(12px, env(safe-area-inset-left, 0px));
+  bottom: max(72px, calc(env(safe-area-inset-bottom, 0px) + 56px));
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(8, 16, 24, 0.45);
+  border: 1px solid rgba(122, 176, 255, 0.35);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.touch-joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  border-radius: 50%;
+  background: rgba(136, 204, 255, 0.85);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.touch-actions {
+  position: absolute;
+  right: max(12px, env(safe-area-inset-right, 0px));
+  bottom: max(72px, calc(env(safe-area-inset-bottom, 0px) + 56px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.touch-btn {
+  min-width: 72px;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(122, 176, 255, 0.45);
+  background: rgba(12, 22, 36, 0.82);
+  color: #e8f4ff;
+  font-size: 0.95rem;
+  font-family: inherit;
+  touch-action: manipulation;
+}
+
+.touch-btn-attack {
+  background: linear-gradient(135deg, rgba(200, 100, 80, 0.9), rgba(140, 50, 40, 0.95));
+  border-color: rgba(255, 180, 140, 0.5);
+  font-weight: 600;
+}
+
+.touch-btn-skill {
+  background: linear-gradient(135deg, rgba(74, 144, 217, 0.85), rgba(42, 96, 153, 0.95));
+  border: none;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  #hud {
+    flex-wrap: wrap;
+    padding: 8px 10px;
+  }
+
+  #leaderboard {
+    display: none;
+  }
+
+  #stats {
+    font-size: 0.82rem;
+    max-width: 100%;
+  }
+
+  .sfx-toggle {
+    bottom: max(140px, calc(env(safe-area-inset-bottom, 0px) + 120px));
+  }
+
+  .skill-cooldown {
+    bottom: max(148px, calc(env(safe-area-inset-bottom, 0px) + 128px));
+    width: min(200px, 50vw);
+  }
+
+  .hint-mobile {
+    bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    font-size: 0.68rem;
+  }
+}
+
+@media (pointer: fine) and (hover: hover) {
+  .hint-mobile {
+    display: none !important;
+  }
 }
