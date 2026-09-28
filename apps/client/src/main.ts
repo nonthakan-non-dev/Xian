@@ -32,6 +32,10 @@ import {
   isTouchUiActive,
   unbindTouchControls,
 } from "./touchControls.js";
+import {
+  initMobilePlayRestrictions,
+  requestLandscapeLock,
+} from "./mobilePlay.js";
 
 const joinOverlay = document.getElementById("join-overlay")!;
 const hud = document.getElementById("hud")!;
@@ -51,6 +55,7 @@ const leaderboardList = document.getElementById(
 )! as HTMLOListElement;
 const toast = document.getElementById("toast")!;
 const touchControlsEl = document.getElementById("touch-controls")!;
+const rotateOverlay = document.getElementById("rotate-overlay")!;
 const hintDesktop = document.querySelector(".hint-desktop") as HTMLElement | null;
 const hintMobile = document.querySelector(".hint-mobile") as HTMLElement | null;
 const skillDraftOverlay = document.getElementById("skill-draft-overlay")!;
@@ -519,6 +524,7 @@ async function joinGame() {
       await leaveToLobby();
     }
     setJoinLoading("connect");
+    void requestLandscapeLock();
     const client = new Client(colyseusClientUrl(serverUrl));
     room = await joinXianRoom(client, serverUrl, name);
     setJoinLoading("world");
@@ -678,3 +684,4 @@ runSummaryRestartBtn.addEventListener("click", () => {
 prefillDisplayNameIfEmpty();
 prefillServerUrlIfEmpty();
 syncMobileUiHints();
+initMobilePlayRestrictions(rotateOverlay);

@@ -8,6 +8,14 @@ body {
   background: #0a0f14;
   color: #e8f0ff;
   overflow: hidden;
+  touch-action: none;
+}
+
+#join-overlay .panel input,
+#join-overlay .panel button,
+#join-overlay .name-row input,
+#join-overlay .name-row button {
+  touch-action: manipulation;
 }
 
 #game {
@@ -642,4 +650,56 @@ body {
   .hint-mobile {
     display: none !important;
   }
+}
+
+.rotate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 8, 12, 0.94);
+  padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
+    env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+}
+
+.rotate-overlay.hidden {
+  display: none;
+}
+
+.rotate-panel {
+  text-align: center;
+  padding: 1.5rem 2rem;
+  max-width: 320px;
+}
+
+.rotate-icon {
+  margin: 0 0 0.75rem;
+  font-size: 3rem;
+  line-height: 1;
+  color: #7ab0ff;
+  animation: rotate-hint-wobble 1.6s ease-in-out infinite;
+}
+
+@keyframes rotate-hint-wobble {
+  0%,
+  100% {
+    transform: rotate(-90deg);
+  }
+  50% {
+    transform: rotate(0deg);
+  }
+}
+
+.rotate-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.rotate-hint {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.8;
 }

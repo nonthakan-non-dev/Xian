@@ -2,7 +2,10 @@
 <html lang="th">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
     <meta name="theme-color" content="#0a0f14" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Xian IO" />
@@ -94,6 +97,13 @@
       </div>
     </div>
     <div id="game"></div>
+    <div id="rotate-overlay" class="rotate-overlay hidden" aria-hidden="true">
+      <div class="rotate-panel">
+        <p class="rotate-icon" aria-hidden="true">↻</p>
+        <p class="rotate-title">หมุนเครื่องเป็นแนวนอน</p>
+        <p class="rotate-hint">เกมเล่นได้เฉพาะแนวนอน</p>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
