@@ -2,11 +2,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { colyseusWsProxyPlugin } from "./src/colyseusWsProxyPlugin.js";
 
 const clientDir = path.dirname(fileURLToPath(import.meta.url));
+const colyseusTarget = "http://127.0.0.1:2567";
 
 export default defineConfig({
   plugins: [
+    colyseusWsProxyPlugin(colyseusTarget),
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["pwa-icon.svg"],
@@ -57,6 +60,24 @@ export default defineConfig({
     host: true,
     port: 5173,
     proxy: {
+      "/health": {
+        target: "http://127.0.0.1:2567",
+        changeOrigin: true,
+      },
+      "/matchmake": {
+        target: "http://127.0.0.1:2567",
+        changeOrigin: true,
+      },
+    },
+  },
+  preview: {
+    host: true,
+    port: 4173,
+    proxy: {
+      "/health": {
+        target: "http://127.0.0.1:2567",
+        changeOrigin: true,
+      },
       "/matchmake": {
         target: "http://127.0.0.1:2567",
         changeOrigin: true,

@@ -21,10 +21,11 @@ import {
 } from "./draftUi.js";
 import { clientSkillCooldownForPlayer } from "./clientSkillCooldown.js";
 import {
+  colyseusClientUrl,
   getDefaultServerUrl,
-  loadStoredServerUrl,
   resolveServerUrl,
   saveServerUrl,
+  storedServerUrlForPage,
 } from "./serverUrl.js";
 import {
   bindTouchControls,
@@ -476,7 +477,7 @@ async function leaveToLobby() {
 
 function prefillServerUrlIfEmpty() {
   if (serverUrlInput.value.trim()) return;
-  serverUrlInput.value = loadStoredServerUrl() ?? getDefaultServerUrl();
+  serverUrlInput.value = storedServerUrlForPage() ?? getDefaultServerUrl();
 }
 
 async function joinGame() {
@@ -490,7 +491,7 @@ async function joinGame() {
     if (room || game) {
       await leaveToLobby();
     }
-    const client = new Client(serverUrl);
+    const client = new Client(colyseusClientUrl(serverUrl));
     room = await joinXianRoom(client, serverUrl, name);
     joinOverlay.classList.add("hidden");
     hud.classList.remove("hidden");
@@ -619,7 +620,7 @@ async function joinGame() {
     const hint =
       err instanceof Error ? err.message : String(err);
     alert(
-      `เชื่อมต่อเซิร์ver ไม่ได้\n\nWS/API: ${serverUrl}\n${hint}\n\n1) รัน pnpm dev:clean จาก root\n2) มือถือ/LAN: ใส่ http://<IP-เครื่องที่รัน server>:2567\n3) ต้องเห็น "[xian] Colyseus listening" ไม่มี EADDRINUSE\n4) Hard refresh หน้าเบราว์เซอร์`,
+      `เชื่อมต่อเซิร์ver ไม่ได้\n\nเซิร์ver: ${serverUrl}\nWebSocket: ${colyseusClientUrl(serverUrl)}\n${hint}\n\n1) pnpm dev:clean — Colyseus listening ที่ :2567\n2) เปิดเกมที่ http://<IP>:5173 ใส่เซิร์ver http://<IP>:2567\n3) มือถือต้องเข้า :2567 ได้ (ปิด/อนุญาต firewall ชั่วคราวเพื่อทด)\n4) Android emulator ใช้ http://10.0.2.2:2567\n5) Hard refresh ถ้า PWA cache URL เก่า`,
     );
   }
 }

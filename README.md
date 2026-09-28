@@ -19,9 +19,12 @@ LAN: ตั้ง `VITE_SERVER_URL=http://<IP>:2567` ฝั่ง client; server
 
 1. บน PC รัน `pnpm dev` (server ต้อง listen ที่ `0.0.0.0:2567`)
 2. หา IP ของ PC (เช่น `192.168.1.10`)
-3. มือถือ Wi‑Fi เดียวกัน เปิด `http://<IP-PC>:5173`
+3. มือถือ Wi‑Fi เดียวกัน เปิด **`http://<IP-PC>:5173`** (หน้าเกม — ไม่ใช่เปิดแค่ `:2567`)
 4. ช่อง **ที่อยู่เซิร์ver** ใส่ `http://<IP-PC>:2567` แล้วกดเข้าโลก
-5. ใช้ joystick ซ้ายล่าง + ปุ่มโจมตี/วิชาขวาล่าง
+5. **WebSocket ไปที่ `:2567` โดยตรง** — มือถือต้อง ping/เปิด `http://<IP-PC>:2567/health` ได้ (ถ้าไม่ได้ → macOS Firewall ให้อนุญat `node` หรือปิด firewall ชั่วคราว)
+6. **Android emulator** ชี้ host ที่ `http://10.0.2.2:2567` (ไม่ใช่ IP LAN ของเครื่อง)
+
+ใช้ joystick ซ้ายล่าง + ปุ่มโจมตี/วิชาขวาล่าง
 
 ค่า server URL จำใน `localStorage` ของเบราว์เซอร์ — เปิดจาก IP ของหน้า client จะเติม default เป็น `http://<hostname>:2567` ให้
 
