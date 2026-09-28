@@ -42,6 +42,11 @@ function isLocalServerHost(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
 
+function clientDevPort(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  return window.location.port || undefined;
+}
+
 /** Suggested default when nothing stored (LAN-friendly from page hostname). */
 export function getDefaultServerUrl(): string {
   if (import.meta.env.VITE_SERVER_URL) {
@@ -50,6 +55,13 @@ export function getDefaultServerUrl(): string {
   const hostname = pageHostname();
   if (isLocalPageHost(hostname)) {
     return "http://localhost:2567";
+  }
+  const port = clientDevPort();
+  if (port === "5173" || port === "4173") {
+    return `http://${hostname}:2567`;
+  }
+  if (typeof window !== "undefined") {
+    return window.location.origin;
   }
   return `http://${hostname}:2567`;
 }

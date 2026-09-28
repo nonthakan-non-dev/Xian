@@ -1,0 +1,10 @@
+node_modules
+**/node_modules
+.git
+.scratch
+**/*.md
+.env
+.env.*
+Dockerfile
+fly.toml
+.fly
