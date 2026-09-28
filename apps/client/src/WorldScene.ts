@@ -23,6 +23,7 @@ import { drawDamageTelegraph } from "./drawTelegraph.js";
 import { isPlayerBlockedBySkillDraft } from "./draftUi.js";
 import {
   clientSkillCooldownRemainingMs,
+  recordClientBasicAttack,
   recordClientSkillUse,
 } from "./clientSkillCooldown.js";
 import {
@@ -384,6 +385,7 @@ export class WorldScene extends Phaser.Scene {
     const vfx = this.visualPos(sid);
     this.setFacingToward(worldX, worldY, vfx.x, vfx.y);
     this.room.send("attack", { aimX: worldX, aimY: worldY });
+    recordClientBasicAttack();
     playSfx("hit");
     const flash = this.add.circle(vfx.x, vfx.y, 28, 0xffeedd, 0.25);
     flash.setDepth(9);

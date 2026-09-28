@@ -593,6 +593,46 @@ body {
   pointer-events: none;
 }
 
+.touch-pad-cooldown {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 2;
+  --cd-ratio: 0;
+  background: conic-gradient(
+    from -90deg,
+    rgba(0, 0, 0, 0.58) 0deg,
+    rgba(0, 0, 0, 0.58) calc(var(--cd-ratio) * 360deg),
+    transparent calc(var(--cd-ratio) * 360deg)
+  );
+}
+
+.touch-pad-cooldown-text {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #ffe8cc;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+  opacity: 0;
+}
+
+.touch-pad.touch-pad-cooling .touch-pad-cooldown {
+  opacity: 1;
+}
+
+.touch-pad.touch-pad-cooling .touch-pad-cooldown-text {
+  opacity: 1;
+}
+
+.touch-pad.touch-pad-cooling .touch-pad-knob {
+  opacity: 0.45;
+}
+
 .touch-pad-label {
   position: absolute;
   left: 50%;
@@ -649,6 +689,10 @@ body {
   .skill-cooldown {
     bottom: max(148px, calc(env(safe-area-inset-bottom, 0px) + 128px));
     width: min(200px, 50vw);
+  }
+
+  .skill-cooldown-on-touch-hidden {
+    display: none !important;
   }
 
   .hint-mobile {

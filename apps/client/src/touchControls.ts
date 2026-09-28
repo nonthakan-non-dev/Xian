@@ -42,6 +42,53 @@ let touchAimVector = { x: 0, y: 0 };
 /** Last non-zero drag aim from attack/skill pads (kept after release). */
 let lastTouchAimVector = { x: 0, y: 0 };
 let bound = false;
+let touchControlsRoot: HTMLElement | null = null;
+
+export type TouchPadCooldownState = {
+  attackRemainingMs: number;
+  attackTotalMs: number;
+  skillRemainingMs: number;
+  skillTotalMs: number;
+};
+
+function applyPadCooldown(
+  pad: HTMLElement | null,
+  remainingMs: number,
+  totalMs: number,
+) {
+  if (!pad) return;
+  const overlay = pad.querySelector(
+    ".touch-pad-cooldown",
+  ) as HTMLElement | null;
+  const text = pad.querySelector(
+    ".touch-pad-cooldown-text",
+  ) as HTMLElement | null;
+  if (!overlay || !text) return;
+  if (remainingMs <= 0 || totalMs <= 0) {
+    pad.classList.remove("touch-pad-cooling");
+    overlay.style.removeProperty("--cd-ratio");
+    text.textContent = "";
+    return;
+  }
+  const ratio = remainingMs / totalMs;
+  pad.classList.add("touch-pad-cooling");
+  overlay.style.setProperty("--cd-ratio", String(ratio));
+  text.textContent = (remainingMs / 1000).toFixed(1);
+}
+
+export function updateTouchPadCooldowns(state: TouchPadCooldownState): void {
+  if (!touchControlsRoot) return;
+  applyPadCooldown(
+    touchControlsRoot.querySelector(".touch-pad-attack"),
+    state.attackRemainingMs,
+    state.attackTotalMs,
+  );
+  applyPadCooldown(
+    touchControlsRoot.querySelector(".touch-pad-skill"),
+    state.skillRemainingMs,
+    state.skillTotalMs,
+  );
+}
 
 export function getMoveVector(): { x: number; y: number } {
   return moveVector;
@@ -68,6 +115,7 @@ export function unbindTouchControls(): void {
   touchAimVector = { x: 0, y: 0 };
   lastTouchAimVector = { x: 0, y: 0 };
   bound = false;
+  touchControlsRoot = null;
 }
 
 export function bindTouchControls(
@@ -81,6 +129,7 @@ export function bindTouchControls(
   root.classList.remove("hidden");
   if (bound) return;
   bound = true;
+  touchControlsRoot = root;
 
   const stickZone = root.querySelector(".touch-pad-move") as HTMLElement | null;
   const stickKnob = stickZone?.querySelector(

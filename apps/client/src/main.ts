@@ -2,6 +2,8 @@ import "./colyseus018JoinPatch.js";
 import Phaser from "phaser";
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import {
+  ACTIVE_SKILL_COOLDOWN_MS,
+  BASIC_ATTACK_COOLDOWN_MS,
   getSkillById,
   parseSkillIds,
   realmDisplayName,
@@ -19,7 +21,10 @@ import {
   isDraftPickPending,
   markDraftPickSent,
 } from "./draftUi.js";
-import { clientSkillCooldownForPlayer } from "./clientSkillCooldown.js";
+import {
+  clientBasicAttackCooldownRemainingMs,
+  clientSkillCooldownForPlayer,
+} from "./clientSkillCooldown.js";
 import {
   colyseusClientUrl,
   getDefaultServerUrl,
@@ -31,6 +36,7 @@ import {
   bindTouchControls,
   isTouchUiActive,
   unbindTouchControls,
+  updateTouchPadCooldowns,
 } from "./touchControls.js";
 import {
   initMobilePlayRestrictions,
@@ -378,6 +384,33 @@ function startSkillCooldownHudLoop() {
 function updateSkillCooldownHud() {
   if (!room) return;
   const me = room.state.players.get(room.sessionId);
+  const attackRemainingMs = clientBasicAttackCooldownRemainingMs();
+
+  if (isTouchUiActive()) {
+    skillCooldownEl.classList.add("hidden", "skill-cooldown-on-touch-hidden");
+    let skillRemainingMs = 0;
+    let skillTotalMs = ACTIVE_SKILL_COOLDOWN_MS;
+    if (me?.lastActiveSkillId) {
+      const skillMeta = getSkillById(me.lastActiveSkillId);
+      if (
+        skillMeta &&
+        (skillMeta.kind === "active" || skillMeta.kind === "hybrid")
+      ) {
+        const cd = clientSkillCooldownForPlayer(me.lastActiveSkillId);
+        skillRemainingMs = cd.remainingMs;
+        skillTotalMs = cd.totalMs;
+      }
+    }
+    updateTouchPadCooldowns({
+      attackRemainingMs,
+      attackTotalMs: BASIC_ATTACK_COOLDOWN_MS,
+      skillRemainingMs,
+      skillTotalMs,
+    });
+    return;
+  }
+
+  skillCooldownEl.classList.remove("skill-cooldown-on-touch-hidden");
   if (!me?.lastActiveSkillId) {
     skillCooldownEl.classList.add("hidden");
     return;
