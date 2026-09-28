@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applySkillPick,
+  playerIgnoresIncomingDamage,
   rollSkillDraft,
   shouldOpenSkillDraft,
   validateSkillPick,
@@ -65,6 +66,13 @@ describe("applySkillPick", () => {
       skillKind: "passive",
     });
     expect(next.lastActiveSkillId).toBe("rf01_s01");
+  });
+});
+
+describe("playerIgnoresIncomingDamage", () => {
+  it("is true while awaiting SkillDraft", () => {
+    expect(playerIgnoresIncomingDamage(true)).toBe(true);
+    expect(playerIgnoresIncomingDamage(false)).toBe(false);
   });
 });
 

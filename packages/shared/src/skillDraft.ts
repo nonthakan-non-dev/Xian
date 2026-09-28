@@ -22,6 +22,13 @@ export function shouldOpenSkillDraft(
   return nextRealmFloor > prevRealmFloor;
 }
 
+/** Modal SkillDraft — ไม่รับดาเมจจาก combat / poison tick (server). */
+export function playerIgnoresIncomingDamage(
+  awaitingSkillDraft: boolean,
+): boolean {
+  return awaitingSkillDraft;
+}
+
 export function rollSkillDraft(
   poolIds: readonly string[],
   ownedIds: readonly string[],

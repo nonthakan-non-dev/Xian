@@ -106,6 +106,43 @@ export function spawnBodyShieldPulse(
   });
 }
 
+/** AoE centered on cultivator (matches server melee circle). */
+export function spawnQiCircleBurst(scene: Phaser.Scene, x: number, y: number) {
+  const ring = scene.add.circle(x, y, 28, 0x88ddff, 0.45);
+  ring.setDepth(38);
+  scene.tweens.add({
+    targets: ring,
+    alpha: 0,
+    scale: 3.5,
+    duration: 360,
+    onComplete: () => ring.destroy(),
+  });
+}
+
+/** Directed skill from body toward aim (cone / line / single). */
+export function spawnSkillBeam(
+  scene: Phaser.Scene,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+) {
+  const g = scene.add.graphics().setDepth(38);
+  g.lineStyle(4, 0xaaccff, 0.75);
+  g.lineBetween(fromX, fromY, toX, toY);
+  const head = scene.add.circle(toX, toY, 14, 0xcceeff, 0.55);
+  head.setDepth(39);
+  scene.tweens.add({
+    targets: [g, head],
+    alpha: 0,
+    duration: 280,
+    onComplete: () => {
+      g.destroy();
+      head.destroy();
+    },
+  });
+}
+
 export function spawnShadowWarpFlash(
   scene: Phaser.Scene,
   x: number,

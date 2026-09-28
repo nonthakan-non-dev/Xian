@@ -1,6 +1,8 @@
 import Phaser from "phaser";
 import type { Room } from "colyseus.js";
 import {
+  ACTIVE_SKILL_COOLDOWN_MS,
+  BASIC_ATTACK_COOLDOWN_MS,
   DEMON_ZONES,
   DUEL_ZONES,
   getSkillById,
@@ -9,18 +11,23 @@ import {
   isInDuelZone,
   MAP_HEIGHT,
   MAP_WIDTH,
+  parseSkillIds,
   playerBodyRadius,
+  telegraphForActiveSkill,
+  telegraphForBasicAttack,
+  type DamageTelegraph,
   type Player,
   type XianState,
 } from "@xian/shared";
+import { drawDamageTelegraph } from "./drawTelegraph.js";
 import { playSfx } from "./sfx.js";
 import {
   applyPlayerColors,
   drawSwordOrbit,
   shadowStealthAlpha,
   spawnBodyShieldPulse,
-  spawnLightningStrike,
-  spawnShadowWarpFlash,
+  spawnQiCircleBurst,
+  spawnSkillBeam,
 } from "./playerVfx.js";
 
 export class WorldScene extends Phaser.Scene {
@@ -50,6 +57,8 @@ export class WorldScene extends Phaser.Scene {
   private challengeKey?: Phaser.Input.Keyboard.Key;
   private herbSprites = new Map<string, Phaser.GameObjects.Rectangle>();
   private onDeathMessage?: (payload: { sessionId: string; name: string }) => void;
+  private telegraphGfx?: Phaser.GameObjects.Graphics;
+  private telegraphClearAt = 0;
 
   constructor() {
     super({ key: "WorldScene" });
@@ -96,6 +105,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.zoneHighlightGfx = this.add.graphics().setDepth(-4);
+    this.telegraphGfx = this.add.graphics().setDepth(14);
 
     if (this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
@@ -112,12 +122,13 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      const { x, y } = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       if (pointer.rightButtonDown()) {
-        this.sendSkill(pointer.worldX, pointer.worldY);
+        this.sendSkill(x, y);
         return;
       }
       if (pointer.leftButtonDown()) {
-        this.sendAttack(pointer.worldX, pointer.worldY);
+        this.sendAttack(x, y);
       }
     });
 
@@ -214,6 +225,43 @@ export class WorldScene extends Phaser.Scene {
     return isCombatKitActive(me.awaitingSkillDraft);
   }
 
+  /** Sprite on map (interpolated) — use for VFX; server still uses synced x/y. */
+  private visualPos(sessionId: string): { x: number; y: number } {
+    const spr = this.playerSprites.get(sessionId);
+    const p = this.room?.state.players.get(sessionId);
+    if (spr) return { x: spr.x, y: spr.y };
+    if (p) return { x: p.x, y: p.y };
+    return { x: 0, y: 0 };
+  }
+
+  private pointerWorld(): { x: number; y: number } {
+    const p = this.input.activePointer;
+    return this.cameras.main.getWorldPoint(p.x, p.y);
+  }
+
+  /** Server-synced origin — telegraph matches authoritative hit detection. */
+  private combatOrigin(sessionId: string): { x: number; y: number } {
+    const p = this.room?.state.players.get(sessionId);
+    if (p) return { x: p.x, y: p.y };
+    return this.visualPos(sessionId);
+  }
+
+  private haltMovement() {
+    if (!this.room) return;
+    this.lastInput = { x: 0, y: 0 };
+    this.room.send("input", { x: 0, y: 0 });
+    this.inputResendAt = this.time.now;
+  }
+
+  private showDamageTelegraph(t: DamageTelegraph, holdMs: number, skill = false) {
+    const g = this.telegraphGfx;
+    if (!g) return;
+    const fill = skill ? 0x6688ff : 0xff8866;
+    const stroke = skill ? 0xaaccff : 0xffaa88;
+    drawDamageTelegraph(g, t, fill, stroke);
+    this.telegraphClearAt = this.time.now + holdMs;
+  }
+
   private setFacingToward(worldX: number, worldY: number, fromX: number, fromY: number) {
     const dx = worldX - fromX;
     const dy = worldY - fromY;
@@ -223,25 +271,37 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private skillAimPoint(me: Player): { aimX: number; aimY: number } {
-    const pointer = this.input.activePointer;
-    if (pointer.worldX || pointer.worldY) {
-      return { aimX: pointer.worldX, aimY: pointer.worldY };
+  private skillAimPoint(sessionId: string): { aimX: number; aimY: number } {
+    const origin = this.visualPos(sessionId);
+    const pw = this.pointerWorld();
+    const dist = Phaser.Math.Distance.Between(origin.x, origin.y, pw.x, pw.y);
+    if (dist > 12) {
+      return { aimX: pw.x, aimY: pw.y };
     }
     return {
-      aimX: me.x + this.facing.x * 200,
-      aimY: me.y + this.facing.y * 200,
+      aimX: origin.x + this.facing.x * 200,
+      aimY: origin.y + this.facing.y * 200,
     };
   }
 
   private sendAttack(worldX: number, worldY: number) {
     if (!this.room || !this.canFight()) return;
-    const me = this.room.state.players.get(this.room.sessionId);
+    const sid = this.room.sessionId;
+    const me = this.room.state.players.get(sid);
     if (!me) return;
-    this.setFacingToward(worldX, worldY, me.x, me.y);
+    this.haltMovement();
+    const origin = this.combatOrigin(sid);
+    const owned = parseSkillIds(me.ownedSkillIds);
+    this.showDamageTelegraph(
+      telegraphForBasicAttack(origin.x, origin.y, worldX, worldY, owned),
+      BASIC_ATTACK_COOLDOWN_MS,
+      false,
+    );
+    const vfx = this.visualPos(sid);
+    this.setFacingToward(worldX, worldY, vfx.x, vfx.y);
     this.room.send("attack", { aimX: worldX, aimY: worldY });
     playSfx("hit");
-    const flash = this.add.circle(me.x, me.y, 28, 0xffeedd, 0.25);
+    const flash = this.add.circle(vfx.x, vfx.y, 28, 0xffeedd, 0.25);
     flash.setDepth(9);
     this.tweens.add({
       targets: flash,
@@ -254,28 +314,45 @@ export class WorldScene extends Phaser.Scene {
 
   private sendSkill(worldX: number, worldY: number) {
     if (!this.room || !this.canFight()) return;
-    const me = this.room.state.players.get(this.room.sessionId);
+    const sid = this.room.sessionId;
+    const me = this.room.state.players.get(sid);
     if (!me) return;
+    this.haltMovement();
+    const origin = this.combatOrigin(sid);
+    const vfx = this.visualPos(sid);
     const skill = me.lastActiveSkillId
       ? getSkillById(me.lastActiveSkillId)
       : undefined;
-    if (skill?.rangeClass === "dash") {
-      const aim = this.skillAimPoint(me);
+    const rc = skill?.rangeClass;
+    if (rc === "dash" || rc === "line" || rc === "cone" || rc === "single") {
+      const aim = this.skillAimPoint(sid);
       worldX = aim.aimX;
       worldY = aim.aimY;
+    } else if (rc === "global") {
+      const aim = this.skillAimPoint(sid);
+      worldX = aim.aimX;
+      worldY = aim.aimY;
+    }
+    if (skill) {
+      this.showDamageTelegraph(
+        telegraphForActiveSkill(origin.x, origin.y, worldX, worldY, skill),
+        skill.cooldownMs ?? ACTIVE_SKILL_COOLDOWN_MS,
+        true,
+      );
     }
     this.room.send("skill", { aimX: worldX, aimY: worldY });
     playSfx("skill");
     const r = playerBodyRadius(me.realmFloor);
-    const rc = skill?.rangeClass;
-    if (rc === "circle" || rc === "global" || rc === "line") {
-      spawnLightningStrike(this, worldX, worldY);
-    } else if (rc === "self") {
-      spawnBodyShieldPulse(this, me.x, me.y, r);
-    } else if (rc === "single") {
-      spawnShadowWarpFlash(this, worldX, worldY);
+    if (rc === "self") {
+      spawnBodyShieldPulse(this, vfx.x, vfx.y, r);
+    } else if (rc === "circle") {
+      spawnQiCircleBurst(this, vfx.x, vfx.y);
+    } else if (rc === "line" || rc === "cone" || rc === "single" || rc === "global") {
+      spawnSkillBeam(this, vfx.x, vfx.y, worldX, worldY);
+    } else if (rc === "dash") {
+      spawnSkillBeam(this, vfx.x, vfx.y, worldX, worldY);
     }
-    const flash = this.add.circle(me.x, me.y, 36, 0xaaccff, 0.35);
+    const flash = this.add.circle(vfx.x, vfx.y, 36, 0xaaccff, 0.35);
     flash.setDepth(9);
     this.tweens.add({
       targets: flash,
@@ -365,10 +442,31 @@ export class WorldScene extends Phaser.Scene {
     const meInput = this.room.state.players.get(this.room.sessionId);
     const draftLocked = meInput?.awaitingSkillDraft ?? false;
 
+    let combatThisFrame = false;
+
+    if (this.spaceKey && Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+      const sid = this.room.sessionId;
+      if (this.room.state.players.get(sid)) {
+        const { aimX, aimY } = this.skillAimPoint(sid);
+        this.sendAttack(aimX, aimY);
+        combatThisFrame = true;
+      }
+    }
+
+    if (this.shiftKey && Phaser.Input.Keyboard.JustDown(this.shiftKey)) {
+      const sid = this.room.sessionId;
+      if (this.room.state.players.get(sid)) {
+        const { aimX, aimY } = this.skillAimPoint(sid);
+        this.sendSkill(aimX, aimY);
+        combatThisFrame = true;
+      }
+    }
+
     const inputChanged = ix !== this.lastInput.x || iy !== this.lastInput.y;
     const moving = ix !== 0 || iy !== 0;
     if (
       !draftLocked &&
+      !combatThisFrame &&
       (inputChanged || (moving && now - this.inputResendAt > 120))
     ) {
       this.lastInput = { x: ix, y: iy };
@@ -376,29 +474,15 @@ export class WorldScene extends Phaser.Scene {
       this.inputResendAt = now;
     }
 
-    if (this.spaceKey && Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-      const me = this.room.state.players.get(this.room.sessionId);
-      if (me) {
-        const pointer = this.input.activePointer;
-        const aimX = pointer.worldX || me.x + 80;
-        const aimY = pointer.worldY || me.y;
-        this.sendAttack(aimX, aimY);
-      }
-    }
-
-    if (this.shiftKey && Phaser.Input.Keyboard.JustDown(this.shiftKey)) {
-      const me = this.room.state.players.get(this.room.sessionId);
-      if (me) {
-        const { aimX, aimY } = this.skillAimPoint(me);
-        this.sendSkill(aimX, aimY);
-      }
-    }
-
     if (this.challengeKey && Phaser.Input.Keyboard.JustDown(this.challengeKey)) {
       this.sendChallengeToNearest();
     }
 
     this.updateDemonZoneHighlight();
+
+    if (this.telegraphGfx && this.time.now >= this.telegraphClearAt) {
+      this.telegraphGfx.clear();
+    }
 
     for (const [id, p] of this.room.state.players) {
       if (!this.playerSprites.has(id)) {

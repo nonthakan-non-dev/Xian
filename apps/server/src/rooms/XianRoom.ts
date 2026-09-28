@@ -26,6 +26,7 @@ import {
   resolveBasicAttackRange,
   skillAppliesPoisonOnHit,
   validateSkillPick,
+  playerIgnoresIncomingDamage,
   isBodyMeleeHit,
   DASH_DISTANCE,
   DEMON_STATS,
@@ -498,7 +499,10 @@ export class XianRoom extends Room {
       this.tickPoisonDecayForPlayer(sessionId, player, now);
       this.tryBodyShieldShockwave(sessionId, player, now);
 
-      if (player.poisonStacks > 0) {
+      if (
+        player.poisonStacks > 0 &&
+        !playerIgnoresIncomingDamage(player.awaitingSkillDraft)
+      ) {
         const tickDmg = poisonDamagePerTick(
           player.poisonStacks,
           herbPoisonTickMultiplier(this.herbActive(player)),
@@ -662,6 +666,8 @@ export class XianRoom extends Room {
     const last = this.lastAttackMs.get(sessionId) ?? 0;
     if (now - last < BASIC_ATTACK_COOLDOWN_MS) return;
     this.lastAttackMs.set(sessionId, now);
+    attacker.inputX = 0;
+    attacker.inputY = 0;
 
     const owned = this.ownedSkills(attacker);
     const aimAngle = Math.atan2(aimY - attacker.y, aimX - attacker.x);
@@ -714,6 +720,8 @@ export class XianRoom extends Room {
     const last = this.lastSkillMs.get(sessionId) ?? 0;
     if (now - last < cd) return;
     this.lastSkillMs.set(sessionId, now);
+    attacker.inputX = 0;
+    attacker.inputY = 0;
 
     let crit = false;
     if (hasOverloadPassive(this.ownedSkills(attacker))) {
@@ -1212,6 +1220,9 @@ export class XianRoom extends Room {
     applyPathOnHit: boolean,
     crit = false,
   ) {
+    if (playerIgnoresIncomingDamage(target.awaitingSkillDraft)) {
+      return;
+    }
     const now = this.nowMs();
     let damage = rawDamage;
 
@@ -1345,7 +1356,11 @@ export class XianRoom extends Room {
             const sid = [...this.state.players.entries()].find(
               ([, p]) => p === nearestPlayer,
             )?.[0];
-            if (sid && nearestPlayer) {
+            if (
+              sid &&
+              nearestPlayer &&
+              !playerIgnoresIncomingDamage(nearestPlayer.awaitingSkillDraft)
+            ) {
               const prevQi = nearestPlayer.currentQi;
               let dmg = stats.damage;
               dmg *= herbDamageTakenMultiplier(this.herbActive(nearestPlayer));
