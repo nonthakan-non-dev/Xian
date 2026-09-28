@@ -91,3 +91,15 @@ _Avoid_: mob, monster, NPC enemy
 **DemonZone**:
 พื้นที่บนแผนที่ที่ spawn อสูรและดรอปดีกว่าแผนที่เปิด
 _Avoid_: PvE area, dungeon
+
+**CultivationRun**:
+ช่วงเล่นหนึ่งรอบตั้งแต่เข้าห้องจน RunEnd — progress (RealmFloor, SkillLoadout, Vassana, …) ผูกกับ run นี้
+_Avoid_: session, life, respawn loop
+
+**RunEnd**:
+เหตุการณ์ที่ CurrentQi ถึงศูนย์ — จบ CultivationRun (ไม่ใช่ disconnect จากห้อง)
+_Avoid_: death, game over
+
+**RunSummary**:
+ข้อมูลสรุป CultivationRun ที่ server ส่งให้ผู้เล่นที่ RunEnd ก่อน despawn
+_Avoid_: death screen, scoreboard

@@ -8,6 +8,7 @@ import {
   SKILL_DRAFT_PICK_TIMEOUT_MS,
   VASSANA_CAP,
   type Player,
+  type RunSummaryPayload,
   type XianState,
 } from "@xian/shared";
 import { joinXianRoom } from "./joinRoom.js";
@@ -40,10 +41,20 @@ const skillCooldownEl = document.getElementById("skill-cooldown")!;
 const skillCooldownName = document.getElementById("skill-cooldown-name")!;
 const skillCooldownLabel = document.getElementById("skill-cooldown-label")!;
 const skillCooldownFill = document.getElementById("skill-cooldown-fill")!;
+const runSummaryOverlay = document.getElementById("run-summary-overlay")!;
+const runSummaryBody = document.getElementById("run-summary-body")!;
+const runSummaryHomeBtn = document.getElementById(
+  "run-summary-home",
+)! as HTMLButtonElement;
+const runSummaryRestartBtn = document.getElementById(
+  "run-summary-restart",
+)! as HTMLButtonElement;
 
 let skillCooldownHudRaf = 0;
 
 let room: Room<XianState> | null = null;
+let game: Phaser.Game | null = null;
+let runSummaryOpen = false;
 /** Instant draft UI before schema patch arrives (no “waiting for server”). */
 let instantDraftOffers: string[] | null = null;
 let instantDraftRealm: { realmFloor: number; qiLayer: number } | null = null;
@@ -196,8 +207,60 @@ function renderSkillDraftButtons(offerIds: string[]) {
   }
 }
 
+function hideRunSummaryModal() {
+  runSummaryOpen = false;
+  runSummaryOverlay.classList.remove("is-visible");
+  runSummaryOverlay.classList.add("hidden");
+}
+
+function showRunSummaryModal(payload: RunSummaryPayload) {
+  runSummaryOpen = true;
+  hideSkillDraftModal();
+  clearInstantDraftCache();
+
+  const realmName = realmDisplayName(payload.realmFloor, payload.qiLayer);
+  const owned = parseSkillIds(payload.ownedSkillIds);
+  const vassanaPct = Math.min(
+    100,
+    Math.round((payload.vassana / VASSANA_CAP) * 100),
+  );
+  const skillLines =
+    owned.length > 0
+      ? owned
+          .map((id) => getSkillById(id)?.nameTh ?? id)
+          .slice(0, 8)
+          .join(" · ")
+      : "หนิงชี่ — ยังไม่ได้เลือกวิชา";
+
+  const min = Math.floor(payload.survivalSec / 60);
+  const sec = payload.survivalSec % 60;
+  const timeLabel =
+    min > 0 ? `${min} นาที ${sec} วินาที` : `${sec} วินาที`;
+
+  runSummaryBody.innerHTML = `
+    <strong>${payload.name}</strong>
+    <p>ขั้นฝึก: ${realmName}<br/>
+    วาสนา: ${vassanaPct}%<br/>
+    ปราณสูงสุด: ${Math.floor(payload.peakCurrentQi)}<br/>
+    รอด: ${timeLabel}</p>
+    <p>วิชา (${owned.length}): ${skillLines}</p>
+  `;
+
+  runSummaryOverlay.classList.remove("hidden");
+  runSummaryOverlay.classList.remove("is-visible");
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      runSummaryOverlay.classList.add("is-visible");
+    });
+  });
+}
+
 function syncSkillDraftModal() {
   if (!room) return;
+  if (runSummaryOpen) {
+    hideSkillDraftModal();
+    return;
+  }
   if (isDraftPickPending()) {
     hideSkillDraftModal();
     return;
@@ -323,25 +386,26 @@ let lastStatsHtml = "";
 function updateHud() {
   if (!room) return;
   const me = room.state.players.get(room.sessionId);
-  if (me) {
-    const realmName = realmDisplayName(
-      me.realmFloor as number,
-      (me.qiLayer as number) ?? 1,
-    );
-    const owned = parseSkillIds(me.ownedSkillIds);
-    const vassanaPct = Math.min(
-      100,
-      Math.round((me.vassana / VASSANA_CAP) * 100),
-    );
-    const skillLine =
-      owned.length > 0
-        ? `<br/>วิชา: ${owned.length} · Shift: ${getSkillById(me.lastActiveSkillId)?.nameTh ?? "—"}`
-        : "<br/><em>หนิงชี่ · โจมตีพื้นฐานอ่อน</em>";
-    const statsHtml = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>วาสนา: ${vassanaPct}%${skillLine}`;
-    if (statsHtml !== lastStatsHtml) {
-      lastStatsHtml = statsHtml;
-      statsEl.innerHTML = statsHtml;
-    }
+  if (!me) {
+    return;
+  }
+  const realmName = realmDisplayName(
+    me.realmFloor as number,
+    (me.qiLayer as number) ?? 1,
+  );
+  const owned = parseSkillIds(me.ownedSkillIds);
+  const vassanaPct = Math.min(
+    100,
+    Math.round((me.vassana / VASSANA_CAP) * 100),
+  );
+  const skillLine =
+    owned.length > 0
+      ? `<br/>วิชา: ${owned.length} · Shift: ${getSkillById(me.lastActiveSkillId)?.nameTh ?? "—"}`
+      : "<br/><em>หนิงชี่ · โจมตีพื้นฐานอ่อน</em>";
+  const statsHtml = `<strong>${me.name}</strong><br/>พลังปราณ: ${Math.floor(me.currentQi)}<br/>ขั้น: ${realmName}<br/>วาสนา: ${vassanaPct}%${skillLine}`;
+  if (statsHtml !== lastStatsHtml) {
+    lastStatsHtml = statsHtml;
+    statsEl.innerHTML = statsHtml;
   }
   const rows = [...room.state.players.values()]
     .filter((p) => p?.name)
@@ -358,10 +422,39 @@ function updateHud() {
     .join("");
 }
 
+async function leaveToLobby() {
+  hideRunSummaryModal();
+  hideSkillDraftModal();
+  clearInstantDraftCache();
+  stopSkillCooldownHudLoop();
+  stopDraftCountdown();
+  const activeRoom = room;
+  room = null;
+  if (activeRoom) {
+    try {
+      await activeRoom.leave();
+    } catch {
+      /* already left */
+    }
+  }
+  if (game) {
+    game.destroy(true);
+    game = null;
+  }
+  hud.classList.add("hidden");
+  joinOverlay.classList.remove("hidden");
+  joinBtn.disabled = false;
+  lastStatsHtml = "";
+}
+
 async function joinGame() {
   const name = nameInput.value.trim() || "นักบำเพ็ต";
   joinBtn.disabled = true;
+  hideRunSummaryModal();
   try {
+    if (room || game) {
+      await leaveToLobby();
+    }
     const client = new Client(SERVER_URL);
     room = await joinXianRoom(client, SERVER_URL, name);
     joinOverlay.classList.add("hidden");
@@ -435,6 +528,11 @@ async function joinGame() {
       syncSkillDraftModal();
     });
 
+    room.onMessage("runSummary", (msg: RunSummaryPayload) => {
+      showRunSummaryModal(msg);
+      nameInput.value = msg.name;
+    });
+
     wireSkillDraftListeners(room);
 
     room.onStateChange(() => {
@@ -446,7 +544,7 @@ async function joinGame() {
     startSkillCooldownHudLoop();
     syncSkillDraftModal();
 
-    const game = new Phaser.Game({
+    game = new Phaser.Game({
       type: Phaser.AUTO,
       parent: "game",
       width: window.innerWidth,
@@ -464,12 +562,8 @@ async function joinGame() {
     game.scene.start("WorldScene", {
       room,
       onDeathMessage: (msg: { sessionId: string; name: string }) => {
-        const mine = msg.sessionId === room!.sessionId;
-        showToast(
-          mine
-            ? "พลังปราณกระจาย — ฟื้นที่ขอบแผนที่"
-            : `${msg.name} ล้ม — ลมปราณกระจาย`,
-        );
+        if (msg.sessionId === room!.sessionId) return;
+        showToast(`${msg.name} ล้ม — ลมปราณกระจาย`);
       },
     });
   } catch (err) {
@@ -486,4 +580,17 @@ async function joinGame() {
 joinBtn.addEventListener("click", () => void joinGame());
 nameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") void joinGame();
+});
+
+runSummaryHomeBtn.addEventListener("click", () => {
+  void leaveToLobby();
+});
+
+runSummaryRestartBtn.addEventListener("click", () => {
+  const name = nameInput.value.trim() || "นักบำเพ็ต";
+  void (async () => {
+    await leaveToLobby();
+    nameInput.value = name;
+    await joinGame();
+  })();
 });

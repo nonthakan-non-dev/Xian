@@ -68,8 +68,9 @@ import {
   type PoisonDecayState,
   qiToOrbValues,
   randomPointInZone,
-  RESPAWN_QI,
+  RUN_SUMMARY_MESSAGE,
   resolveFacingUnitVector,
+  type RunSummaryPayload,
   rollOrbWithVassana,
   SHADOW_WARP_RANGE,
   SHIELD_DURATION_MS,
@@ -97,27 +98,6 @@ function randomPosition(): { x: number; y: number } {
   };
 }
 
-function respawnAtEdge(): { x: number; y: number } {
-  const margin = 100;
-  const edge = Math.floor(Math.random() * 4);
-  switch (edge) {
-    case 0:
-      return { x: margin + Math.random() * (MAP_WIDTH - margin * 2), y: margin };
-    case 1:
-      return {
-        x: MAP_WIDTH - margin,
-        y: margin + Math.random() * (MAP_HEIGHT - margin * 2),
-      };
-    case 2:
-      return {
-        x: margin + Math.random() * (MAP_WIDTH - margin * 2),
-        y: MAP_HEIGHT - margin,
-      };
-    default:
-      return { x: margin, y: margin + Math.random() * (MAP_HEIGHT - margin * 2) };
-  }
-}
-
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
@@ -143,6 +123,11 @@ export class XianRoom extends Room {
     string,
     { clear: () => void }
   >();
+  private runMeta = new Map<
+    string,
+    { runStartedAtMs: number; peakCurrentQi: number }
+  >();
+  private endingRun = new Set<string>();
 
   onCreate() {
     this.maxClients = MAX_PLAYERS;
@@ -232,14 +217,39 @@ export class XianRoom extends Room {
     player.herbBuffUntil = 0;
     player.lastDamagedAt = 0;
     this.state.players.set(client.sessionId, player);
+    this.runMeta.set(client.sessionId, {
+      runStartedAtMs: Date.now(),
+      peakCurrentQi: player.currentQi,
+    });
+    this.endingRun.delete(client.sessionId);
   }
 
   onLeave(client: Client) {
-    this.clearSkillDraftCelebrateTimer(client.sessionId);
+    const player = this.state.players.get(client.sessionId);
+    if (player) {
+      this.clearPoisonPlayer(client.sessionId, player);
+    }
+    this.clearPlayerSessionMaps(client.sessionId);
     this.state.players.delete(client.sessionId);
-    this.lastAttackMs.delete(client.sessionId);
-    this.lastSkillMs.delete(client.sessionId);
-    this.lastFlyingSwordMs.delete(client.sessionId);
+  }
+
+  private recordPeakQi(sessionId: string, qi: number) {
+    const meta = this.runMeta.get(sessionId);
+    if (!meta) return;
+    if (qi > meta.peakCurrentQi) {
+      meta.peakCurrentQi = qi;
+    }
+  }
+
+  private clearPlayerSessionMaps(sessionId: string) {
+    this.clearSkillDraftCelebrateTimer(sessionId);
+    this.lastAttackMs.delete(sessionId);
+    this.lastSkillMs.delete(sessionId);
+    this.lastFlyingSwordMs.delete(sessionId);
+    this.bodyShieldShockwaveAt.delete(sessionId);
+    this.poisonDecayByKey.delete(this.poisonKeyPlayer(sessionId));
+    this.runMeta.delete(sessionId);
+    this.endingRun.delete(sessionId);
   }
 
   private playersCanFight(_a: Player, _b: Player): boolean {
@@ -420,7 +430,7 @@ export class XianRoom extends Room {
 
     for (const [sessionId, player] of this.state.players) {
       if (player.currentQi <= 0) {
-        this.killPlayer(player, sessionId, 0);
+        this.endPlayerRun(sessionId, player, 0);
         continue;
       }
 
@@ -1205,27 +1215,56 @@ export class XianRoom extends Room {
     player: Player,
     sessionId: string,
     qiBeforeDeath: number,
-    killer: Player | undefined,
+    _killer: Player | undefined,
   ) {
-    this.killPlayer(player, sessionId, qiBeforeDeath);
+    this.endPlayerRun(sessionId, player, qiBeforeDeath);
   }
 
-  private killPlayer(player: Player, sessionId: string, qiBeforeDeath: number) {
+  private endPlayerRun(
+    sessionId: string,
+    player: Player,
+    qiBeforeDeath: number,
+  ) {
+    if (this.endingRun.has(sessionId)) return;
+    if (!this.state.players.has(sessionId)) return;
+    this.endingRun.add(sessionId);
+
+    player.awaitingSkillDraft = false;
+    player.draftOfferIds = "";
+    player.draftDeadlineMs = 0;
+    this.clearSkillDraftCelebrateTimer(sessionId);
+
     const drop = qiToOrbValues(qiBeforeDeath);
     for (const value of drop) {
       this.spawnOrbAt(player.x, player.y, value);
     }
-    const pos = respawnAtEdge();
-    player.x = pos.x;
-    player.y = pos.y;
-    player.currentQi = RESPAWN_QI;
+
+    const meta = this.runMeta.get(sessionId);
+    const runStartedAtMs = meta?.runStartedAtMs ?? Date.now();
+    const peakCurrentQi = Math.max(
+      meta?.peakCurrentQi ?? 0,
+      qiBeforeDeath,
+    );
+    const survivalSec = Math.floor((Date.now() - runStartedAtMs) / 1000);
+
+    const payload: RunSummaryPayload = {
+      name: player.name,
+      realmFloor: player.realmFloor,
+      qiLayer: player.qiLayer,
+      vassana: player.vassana,
+      ownedSkillIds: player.ownedSkillIds,
+      peakCurrentQi,
+      survivalSec,
+    };
+
+    const client = this.clients.find((c) => c.sessionId === sessionId);
+    client?.send(RUN_SUMMARY_MESSAGE, payload);
+
+    const playerName = player.name;
     this.clearPoisonPlayer(sessionId, player);
-    player.overloadStacks = 0;
-    this.bodyShieldShockwaveAt.delete(sessionId);
-    player.stunUntil = 0;
-    player.slowUntil = 0;
-    player.shieldUntil = 0;
-    this.broadcast("playerDeath", { sessionId, name: player.name });
+    this.broadcast("playerDeath", { sessionId, name: playerName });
+    this.clearPlayerSessionMaps(sessionId);
+    this.state.players.delete(sessionId);
   }
 
   private killDemon(demon: Demon, demonId: string, killer: Player | undefined) {
@@ -1297,7 +1336,7 @@ export class XianRoom extends Room {
                 this.emitDamageNumber(nearestPlayer.x, nearestPlayer.y, dealt);
               }
               if (nearestPlayer.currentQi <= 0) {
-                this.killPlayer(nearestPlayer, sid, prevQi);
+                this.endPlayerRun(sid, nearestPlayer, prevQi);
               }
             }
           }
@@ -1367,6 +1406,7 @@ export class XianRoom extends Room {
         player.currentQi = updated.currentQi;
         player.realmFloor = updated.realmFloor;
         player.qiLayer = updated.qiLayer;
+        this.recordPeakQi(sessionId, player.currentQi);
         if (player.realmFloor > prevFloor) {
           this.afterRealmPromote(player, sessionId);
           toRemove.push(id);
@@ -1400,6 +1440,7 @@ export class XianRoom extends Room {
         player.currentQi = updated.currentQi;
         player.realmFloor = updated.realmFloor;
         player.qiLayer = updated.qiLayer;
+        this.recordPeakQi(sessionId, player.currentQi);
         if (player.realmFloor > prevFloor) {
           this.afterRealmPromote(player, sessionId);
           player.herbBuffUntil = this.nowMs() + HERB_BUFF_MS;

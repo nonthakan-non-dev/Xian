@@ -493,9 +493,9 @@ export class WorldScene extends Phaser.Scene {
 
     const now = this.time.now;
     const meInput = this.room.state.players.get(this.room.sessionId);
-    const draftLocked = isPlayerBlockedBySkillDraft(
-      meInput?.awaitingSkillDraft ?? false,
-    );
+    const draftLocked =
+      !meInput ||
+      isPlayerBlockedBySkillDraft(meInput.awaitingSkillDraft ?? false);
 
     let combatThisFrame = false;
 
@@ -520,6 +520,7 @@ export class WorldScene extends Phaser.Scene {
     const inputChanged = ix !== this.lastInput.x || iy !== this.lastInput.y;
     const moving = ix !== 0 || iy !== 0;
     if (
+      meInput &&
       !draftLocked &&
       !combatThisFrame &&
       (inputChanged || (moving && now - this.inputResendAt > 120))
