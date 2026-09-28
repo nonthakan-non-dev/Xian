@@ -17,6 +17,10 @@
   "pnpm": {
     "overrides": {
       "@colyseus/schema": "5.0.34"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "msgpackr-extract"
+    ]
   }
 }

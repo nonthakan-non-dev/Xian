@@ -6,7 +6,17 @@ import { createServer } from "http";
 import path from "node:path";
 import { XianRoom } from "./rooms/XianRoom.js";
 
-const port = Number(process.env.PORT ?? 2567);
+function resolveListenPort(): number {
+  const raw = process.env.PORT;
+  if (raw !== undefined && raw.trim() !== "") {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return n;
+    console.warn(`[xian] invalid PORT=${JSON.stringify(raw)}, using fallback`);
+  }
+  return process.env.NODE_ENV === "production" ? 8080 : 2567;
+}
+
+const port = resolveListenPort();
 const host = process.env.HOST ?? "0.0.0.0";
 const clientDist = process.env.CLIENT_DIST?.trim();
 
@@ -34,6 +44,17 @@ const gameServer = new Server({
 
 gameServer.define("xian", XianRoom);
 
-await gameServer.listen(port, host, undefined, () => {
-  console.log(`[xian] Colyseus listening on http://${host}:${port}`);
-});
+try {
+  await gameServer.listen(port, host, undefined, (err?: Error) => {
+    if (err) {
+      console.error("[xian] listen callback error:", err);
+      return;
+    }
+    console.log(
+      `[xian] Colyseus listening on http://${host}:${port} (NODE_ENV=${process.env.NODE_ENV ?? "unset"}, PORT env=${process.env.PORT ?? "unset"})`,
+    );
+  });
+} catch (err) {
+  console.error("[xian] failed to start:", err);
+  process.exit(1);
+}
