@@ -2,7 +2,8 @@ import Phaser from "phaser";
 import type { Room } from "colyseus.js";
 import {
   ACTIVE_SKILL_COOLDOWN_MS,
-  BASIC_ATTACK_COOLDOWN_MS,
+  DAMAGE_TELEGRAPH_HOLD_BASIC_MS,
+  DAMAGE_TELEGRAPH_HOLD_SKILL_MS,
   DEMON_ZONES,
   DUEL_ZONES,
   getSkillById,
@@ -329,7 +330,7 @@ export class WorldScene extends Phaser.Scene {
     const owned = parseSkillIds(me.ownedSkillIds);
     this.showDamageTelegraph(
       telegraphForBasicAttack(origin.x, origin.y, worldX, worldY, owned),
-      BASIC_ATTACK_COOLDOWN_MS,
+      DAMAGE_TELEGRAPH_HOLD_BASIC_MS,
       false,
     );
     const vfx = this.visualPos(sid);
@@ -377,7 +378,7 @@ export class WorldScene extends Phaser.Scene {
     }
     this.showDamageTelegraph(
       telegraphForActiveSkill(origin.x, origin.y, worldX, worldY, skill),
-      skill.cooldownMs ?? ACTIVE_SKILL_COOLDOWN_MS,
+      DAMAGE_TELEGRAPH_HOLD_SKILL_MS,
       true,
     );
     recordClientSkillUse();

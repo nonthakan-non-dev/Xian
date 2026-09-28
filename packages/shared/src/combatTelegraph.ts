@@ -30,6 +30,10 @@ export type DamageTelegraph =
 
 export const DASH_TELEGRAPH_HIT_RADIUS = 48;
 
+/** Client-only preview duration (not tied to attack/skill cooldown). */
+export const DAMAGE_TELEGRAPH_HOLD_BASIC_MS = 140;
+export const DAMAGE_TELEGRAPH_HOLD_SKILL_MS = 200;
+
 export function telegraphForBasicAttack(
   originX: number,
   originY: number,
