@@ -1,0 +1,14 @@
+services:
+  xian:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: xian
+    container_name: xian
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      HOST: 0.0.0.0
+      CLIENT_DIST: /app/apps/client/dist

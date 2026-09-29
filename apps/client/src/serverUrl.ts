@@ -47,23 +47,27 @@ function clientDevPort(): string | undefined {
   return window.location.port || undefined;
 }
 
+function isViteClientPort(port: string | undefined): boolean {
+  return port === "5173" || port === "4173";
+}
+
 /** Suggested default when nothing stored (LAN-friendly from page hostname). */
 export function getDefaultServerUrl(): string {
   if (import.meta.env.VITE_SERVER_URL) {
     return normalizeServerUrl(import.meta.env.VITE_SERVER_URL);
   }
-  const hostname = pageHostname();
-  if (isLocalPageHost(hostname)) {
-    return "http://localhost:2567";
-  }
-  const port = clientDevPort();
-  if (port === "5173" || port === "4173") {
-    return `http://${hostname}:2567`;
-  }
   if (typeof window !== "undefined") {
+    const hostname = pageHostname();
+    const port = clientDevPort();
+    if (isViteClientPort(port)) {
+      if (isLocalPageHost(hostname)) {
+        return "http://localhost:2567";
+      }
+      return `http://${hostname}:2567`;
+    }
     return window.location.origin;
   }
-  return `http://${hostname}:2567`;
+  return "http://localhost:2567";
 }
 
 export function loadStoredServerUrl(): string | null {
@@ -84,6 +88,15 @@ export function storedServerUrlForPage(): string | null {
     const u = new URL(stored);
     const page = pageHostname();
     if (!isLocalPageHost(page) && isLocalServerHost(u.hostname)) {
+      return null;
+    }
+    if (
+      typeof window !== "undefined" &&
+      isLocalPageHost(page) &&
+      isLocalServerHost(u.hostname) &&
+      u.port === "2567" &&
+      !isViteClientPort(clientDevPort())
+    ) {
       return null;
     }
   } catch {
