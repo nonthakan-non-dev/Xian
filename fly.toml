@@ -1,3 +1,8 @@
+# fly.toml app configuration file generated for xian on 2026-09-29T04:41:01Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
 app = 'xian'
 primary_region = 'ams'
 
@@ -5,9 +10,9 @@ primary_region = 'ams'
   dockerfile = 'Dockerfile'
 
 [env]
-  PORT = '8080'
-  HOST = '0.0.0.0'
   CLIENT_DIST = '/app/apps/client/dist'
+  HOST = '0.0.0.0'
+  PORT = '8080'
 
 [http_service]
   internal_port = 8080
@@ -17,11 +22,11 @@ primary_region = 'ams'
   min_machines_running = 1
 
   [[http_service.checks]]
-    grace_period = '60s'
     interval = '30s'
+    timeout = '5s'
+    grace_period = '1m0s'
     method = 'GET'
     path = '/health'
-    timeout = '5s'
 
 [[vm]]
   size = 'shared-cpu-1x'
